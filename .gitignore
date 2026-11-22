@@ -1,0 +1,24 @@
+# Local tooling / compute helpers
+a100/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Weights, datasets, archives
+*.pt
+*.pth
+*.safetensors
+*.bin
+*.ckpt
+*.tar
+*.tar.*
+*.zip
+*.mp4
+*.avi
+
+# OS / IDE
+.DS_Store
+.ipynb_checkpoints/
