@@ -1,0 +1,5 @@
+# STARD | configs/ablation/no_mask.yaml
+# Status: PLACEHOLDER - ablation: classification only, mask losses disabled.
+#
+# Inherits : configs/fusion_full.yaml
+# Override : loss.w_spatial = 0.0, loss.w_temporal = 0.0

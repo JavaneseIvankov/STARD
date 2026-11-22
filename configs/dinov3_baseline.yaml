@@ -1,0 +1,6 @@
+# STARD | configs/dinov3_baseline.yaml
+# Status: PLACEHOLDER - unimodal spatial baseline (Orang A).
+#
+# Inherits : configs/base.yaml
+# Model    : DINOv3 ViT-B spatial backbone + multi-task heads
+# Masks    : spatial only

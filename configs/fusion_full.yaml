@@ -1,0 +1,6 @@
+# STARD | configs/fusion_full.yaml
+# Status: PLACEHOLDER - full STARD architecture (Orang C).
+#
+# Inherits : configs/base.yaml
+# Model    : DINOv3 + V-JEPA -> Feature Projection + Gated Fusion -> MultiTaskHeads
+# Loss     : CrossEntropy(cls) + BCE(spatial mask) + BCE(temporal mask)
