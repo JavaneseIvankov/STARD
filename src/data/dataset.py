@@ -8,6 +8,7 @@ Responsibility
 - PyTorch Dataset over raw frames (datasets/processed).
 - PyTorch Dataset over cached backbone features (datasets/cached_features, .pt).
 - Produce BatchInput tensors exactly as specified in src/contracts.py.
+- Cached feature layout and dtype policy: docs/cache_format.md
 
 Contract
 --------

@@ -101,11 +101,15 @@ STARD/
 │   ├── models/                 # DINOv3, V-JEPA, Gated Fusion, & Multi-Task Heads
 │   └── utils/                  # Multi-task loss functions & evaluation metrics (AUC, F1, IoU)
 │
+├── docs/                       # Internal specs (cached feature format, etc.)
+│   └── cache_format.md         # Backbone embedding cache contract
+│
 ├── scripts/                    # Entry-point execution scripts
 │   ├── run_preprocess.py       # Face detection & identity split generation
 │   ├── extract_features.py     # Offline backbone feature extraction
 │   ├── train.py                # Main PyTorch training loop
-│   └── evaluate.py             # Model evaluation & benchmark exporter
+│   ├── evaluate.py             # Model evaluation & benchmark exporter
+│   └── smoke_dinov3.py         # Dataset-free smoke test for the spatial branch
 │
 └── outputs/                    # Experiment outputs (git-ignored)
     ├── checkpoints/            # Model weights (.pt)
