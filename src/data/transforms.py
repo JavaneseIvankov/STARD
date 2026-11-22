@@ -1,23 +1,29 @@
-"""STARD | src/data/transforms.py
+"""STAF-Net | src/data/transforms.py
 
-Owner   : Orang 1 (Data & Preproc Lead)
+Owner   : Person 1 + Person 2 (shared)
 Status  : PLACEHOLDER - structure only, no implementation yet.
 
 Responsibility
 --------------
-- Image and video-level augmentation pipelines.
-- Train-time augmentation vs deterministic val/test transform.
+- Two distinct preprocessing pipelines, one per backbone, using each model's
+  official normalization constants.
+- DINOv3: 224x224, ImageNet mean/std (0.485/0.456/0.406, 0.229/0.224/0.225).
+- V-JEPA 2.1: 384x384, normalization from the released checkpoint config.
+- Train-only mild appearance augmentation (brightness, compression, small blur);
+  geometry applied identically across all frames of one clip.
 
 Contract
 --------
-- Must keep output shape (16, 3, 224, 224) and float range [0.0, 1.0].
-- Backbone-specific normalization handled inside model wrappers.
+- Outputs stay float32 in [0, 1] before normalization; normalization happens
+  inside the branch wrapper, not here.
+- No mask-aware augmentation: DFDC ships video-level labels only.
 
 TODO
 ----
-- [ ] Spatial augmentations (flip, crop jitter, color jitter)
-- [ ] Temporal augmentations (frame dropout, temporal jitter)
-- [ ] Mask-aware augmentation for label_spatial / label_temporal
+- [ ] dino_transform(train: bool) -> frames (4, 3, 224, 224)
+- [ ] vjepa_transform(train: bool) -> frames (3, 16, 384, 384)
+- [ ] Clip-consistent geometric augmentation
+- [ ] Verify V-JEPA normalization constants against the checkpoint config
 """
 
-# TODO(orang-1): implement transforms described above.
+# TODO(person-1,person-2): implement per-branch transforms described above.

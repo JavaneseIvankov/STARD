@@ -1,99 +1,93 @@
-# Cached backbone features — format spec v0.1
+# Cached backbone features — format spec v0.2
 
-Owner: Orang A (DINOv3) + Orang B (V-JEPA), consumed by Orang 1 (`src/data/dataset.py`).
+Owner: Person 1 + Person 2 (producers), Person 3 (consumer).
 
-Purpose: backbones are frozen, so extract once with `scripts/extract_features.py` and
-reuse the embeddings for every fusion/head training run. This is what makes the
-full pipeline trainable on a single GPU (README §7.3).
+Stage II trains only on cached per-video embeddings, so the cache is the contract
+between Stage I and the ablation matrix. Backbones are expensive; the cache is not.
 
 ## Layout
 
 ```text
-datasets/cached_features/
-├── index.csv                 # one row per video, all splits
-├── train/shard-00000.pt      # ~500 videos per shard
-├── train/shard-00001.pt
-├── val/shard-00000.pt
-└── test/shard-00000.pt
+data/features/
+├── dino_frozen/
+│   ├── MANIFEST.json
+│   ├── index.csv
+│   └── train/shard-00000.pt
+├── dino_lora/
+├── vjepa_frozen/
+└── vjepa_lora/
 ```
 
-Sharding matters: one file per video means ~100k tiny files and a slow
-`DataLoader` on network filesystems.
+One directory per variant. Splits are subdirectories; shards hold ~500 videos
+each so the DataLoader does not open thousands of tiny files.
 
 ## `index.csv`
 
 | column | type | notes |
 | :--- | :--- | :--- |
-| `video_id` | str | stable key, matches `datasets/processed/` |
-| `identity_id` | str | identity-level split source of truth |
+| `video_id` | str | matches `data/manifests/manifest.csv` |
+| `source_group_id` | str | grouping key for bootstrap CI and split checks |
 | `split` | str | `train` / `val` / `test` |
 | `shard` | str | e.g. `train/shard-00000.pt` |
-| `shard_index` | int | position inside `records` list |
-| `label_cls` | int | 0 real / 1 deepfake / 2 physical_spoof |
-| `num_frames` | int | 16 |
-| `has_spatial_mask` | 0/1 | whether `label_spatial` exists |
-| `has_temporal_mask` | 0/1 | whether `label_temporal` exists |
-| `source_sha` | str | sha256 of the source video, dedup + provenance |
+| `shard_index` | int | position inside the shard's `records` list |
+| `label` | int | 0 real, 1 fake |
+| `dim` | int | 384 for dino variants, 768 for vjepa variants |
 
 ## Shard payload
 
-`torch.save` of a dict (`_use_new_zipfile_serialization=True`):
+`torch.save` of a dict, `_use_new_zipfile_serialization=True`:
 
 ```python
 {
-    "format_version": "0.1",
-    "backbone": {"spatial": "dinov3-vits16", "temporal": "vjepa2.1-vitb16"},
+    "format_version": "0.2",
+    "variant": "dino_lora",
+    "checkpoint_id": "dinov3-vits16-lvd1689m+lora-r8-a16",
     "records": [
         {
-            "video_id": "...",
-            "spatial": torch.Tensor,   # (16, 196, 384)
-            "temporal": torch.Tensor,  # (16, 196, 768)
-            "label_cls": int,
-            "label_spatial": torch.Tensor | None,   # (16, 224, 224)
-            "label_temporal": torch.Tensor | None,  # (16,)
+            "video_id": "abc123.mp4",
+            "label": 1,
+            "z": torch.Tensor,          # (384,) dino  |  (768,) vjepa
+            "source_group_id": "def.mp4",
         },
-        # ...
     ],
 }
 ```
 
-A unimodal baseline may omit the branch it does not use (`"temporal": None`).
-`src/data/dataset.py` must still yield a valid `src.contracts.BatchInput`.
+One pooled vector per video. Not a token grid: Stage II never sees spatial or
+temporal tokens, which is why 1,500 videos × 4 variants is ~13 MB fp32.
 
 ## Dtype policy
 
-- Store `spatial` / `temporal` as **float16** — halves disk and load time, no
-  measurable accuracy effect because backbones are frozen.
-- Cast to **float32** in `dataset.py` (`tensor.float()`) so fusion and heads train
-  in fp32 / AMP bf16 without silent precision surprises.
-- Never store post-normalization features twice; normalization already happened
-  inside the backbone wrapper.
+Store and train in **float32**. A 384-dim vector is 1.5 KiB, so fp16 would save
+noise-level space while adding cast bugs at the projection layer. Cast only if
+the subset grows by orders of magnitude.
 
 ## Invariants
 
-1. `spatial.shape == (16, 196, 384)` and `temporal.shape == (16, 196, 768)` —
-   enforced by `src/contracts.py`.
-2. `format_version` mismatch on load = hard error, not a warning.
-3. A change to backbone weights, patch size, input size, or frame sampling
-   invalidates the whole cache directory. Write a `MANIFEST.json` per cache run:
+1. `z.shape == (384,)` for `dino_*`, `(768,)` for `vjepa_*` — enforced by
+   `src.contracts.FeatureRecord`.
+2. `format_version` mismatch on load is a hard error, not a warning.
+3. Variants are never mixed silently: a run records exactly which variants it read.
+4. Changing backbone weights, LoRA config, frame indices, resolution, pooling,
+   or clip sampling invalidates the cache. `MANIFEST.json` records all of them:
 
 ```json
 {
-  "format_version": "0.1",
-  "backbones": {"spatial": "dinov3-vits16", "temporal": "vjepa2.1-vitb16"},
-  "image_size": 224,
+  "format_version": "0.2",
+  "variant": "vjepa_lora",
+  "backbone": "vjepa2.1-vitb16",
+  "checkpoint_id": "...",
+  "preprocessing_version": "clips-v1",
   "num_frames": 16,
-  "sampling": "uniform",
+  "resolution": 384,
+  "pooling": "mean",
   "created_at": "...",
   "git_commit": "..."
 }
 ```
 
-4. Extraction runs under `torch.no_grad()` with `model.eval()`.
-5. Masks are stored per video, not per batch; collation is the Dataset's job.
-
-## Disk budget
-
-Per video, fp16: `16 * 196 * (384 + 768) * 2 bytes ≈ 7.2 MiB`.
-100k videos ≈ 720 GB — plan shards and pruning before a full extraction run.
-Extract spatial-only or temporal-only first if disk is tight.
+5. Extraction runs under `torch.no_grad()` with `model.eval()`.
+6. Shard writing is resume-safe: an existing shard with a matching
+   `format_version` and `checkpoint_id` is skipped, never silently overwritten.
+7. Frozen and LoRA variants of the same branch must be produced from the same
+   clip cache and the same manifest, otherwise A1 vs A3 is not a fair comparison.

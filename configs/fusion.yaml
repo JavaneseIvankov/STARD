@@ -1,0 +1,10 @@
+# STAF-Net | configs/fusion.yaml
+# Status: PLACEHOLDER - Person 3 fusion + ablation driver (plan 7.4, 8).
+#
+# features   : 4 cached variants (dino_frozen, dino_lora, vjepa_frozen, vjepa_lora)
+# projection : each branch -> 256 dims, GELU
+# head       : 256 -> 128 -> 1, GELU, dropout 0.2
+# fusion     : concat | gated (g = sigmoid(Wg[h_D || h_J] + bg))
+# optim      : AdamW lr 1e-3, batch 64, max 30 epochs, early stop 5 on val AUROC
+# loss       : BCEWithLogitsLoss
+# ablations  : A1..A8 selected by --experiment flag (see README table)

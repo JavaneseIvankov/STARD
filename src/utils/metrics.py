@@ -1,24 +1,29 @@
-"""STARD | src/utils/metrics.py
+"""STAF-Net | src/utils/metrics.py
 
-Owner   : Orang C / Shared (Integration)
+Owner   : Person 3
 Status  : PLACEHOLDER - structure only, no implementation yet.
 
 Responsibility
 --------------
-- Classification metrics: AUC, F1, accuracy, per-class report.
-- Mask metrics: spatial IoU/Dice, temporal IoU/F1.
+- Video-level evaluation for binary real/fake detection.
+- AUROC (primary), F1, accuracy, precision, recall, EER.
+- Confusion matrix and ROC curve data for results/plots.
+- Bootstrap confidence intervals grouped by source_group_id.
 
 Contract
 --------
-- Pure functions over predictions + targets, no model dependency.
-- Used by scripts/evaluate.py and notebooks/02_error_analysis.ipynb.
+- Pure functions over predictions + labels, no model or dataset dependency.
+- Threshold and checkpoint selection use validation data only; test is touched
+  once, after selection.
+- Outputs are plain dicts / numpy arrays so results/metrics/*.json stays simple.
 
 TODO
 ----
-- [ ] AUC / F1 / confusion matrix helpers
-- [ ] Spatial mask IoU + Dice
-- [ ] Temporal mask IoU + F1
-- [ ] Aggregator feeding the benchmark table in README
+- [ ] auroc / f1 / accuracy / precision / recall / eer
+- [ ] confusion_matrix + roc_curve export
+- [ ] group-level bootstrap CI over source_group_id
+- [ ] best_threshold_from_val(preds, labels)
+- [ ] json exporter for the standard results table (README)
 """
 
-# TODO(orang-c): implement metrics described above.
+# TODO(person-3): implement metrics described above.

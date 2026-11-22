@@ -1,9 +1,9 @@
-# STARD dependencies
-# Floors, not exact pins. Pin exact versions in REPRODUCIBILITY.md once the
-# first real run is reproducible.
+# STAF-Net dependencies
+# Floors, not exact pins. Pin exact versions in the run report once the first
+# A100 run is reproducible.
 #
-# Python 3.10-3.12 recommended: torch and transformers wheels lag the newest
-# CPython release, and V-JEPA 2.1 remote code is validated against those.
+# Python 3.10-3.12 recommended: torch, transformers, and V-JEPA remote code are
+# validated against those, and PEFT/torch wheels lag the newest CPython.
 
 # --- core ---
 torch>=2.4
@@ -12,19 +12,23 @@ numpy>=1.26
 pyyaml>=6.0
 tqdm>=4.66
 
-# --- backbone weights ---
+# --- backbones + adaptation ---
 # V-JEPA 2.1 ships custom modeling code (auto_map / trust_remote_code).
-# The reference checkpoint config.json reports transformers_version 5.14.1;
-# install the version your exported checkpoint expects, not the newest.
+# The reference checkpoint config reports transformers_version 5.14.1;
+# install the version your exported checkpoint expects, not simply the newest.
 transformers>=4.56
+peft>=0.13
+accelerate>=0.34
 huggingface_hub>=0.34
 safetensors>=0.4
 einops>=0.8
 
 # --- data / preprocessing ---
+opencv-python>=4.9
 pandas>=2.2
 scikit-learn>=1.4
-opencv-python-headless>=4.9
+matplotlib>=3.8
+kaggle>=1.6
 
 # --- experiment tracking ---
 tensorboard>=2.16

@@ -1,0 +1,10 @@
+# STAF-Net | configs/dino_lora.yaml
+# Status: PLACEHOLDER - Person 1 supervised LoRA run (plan 5.2).
+#
+# checkpoint : facebook/dinov3-vits16-pretrain-lvd1689m
+# input      : 4 frames x 224x224, layout (B, 4, 3, 224, 224)
+# lora       : r=8, alpha=16, dropout=0.05, targets = attention q/v (verify names first)
+# optim      : AdamW, lr 1e-4 (LoRA) / 5e-4 (head), weight_decay 0.01
+# runtime    : BF16, microbatch 4-8, epochs 1-2
+# loss       : BCEWithLogitsLoss, select on validation AUROC
+# outputs    : checkpoints/dino_{frozen,lora}.pt + features/dino_{frozen,lora}

@@ -1,3 +1,10 @@
+> **SUPERSEDED — kept for history only.**
+> The project moved to **STAF-Net** (binary DFDC detection, DINOv3 ViT-S/16 +
+> V-JEPA 2.1 ViT-B/16, frozen-vs-LoRA ablations, no mask heads). The active
+> contract is `src/contracts.py` v0.2 and the active plan lives in
+> `docs/open_decisions.md` + `README.md`. Everything below describes the
+> earlier 3-class + spatial/temporal-mask design and no longer matches the code.
+
 # STARD: Spatial-Temporal Deepfake Detection System
 > **Panduan Arsitektur, Kontrak Modul, dan Workflow Pengembangan Tim**
 

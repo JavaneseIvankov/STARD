@@ -1,7 +1,6 @@
-"""STARD | src/models package.
+"""STAF-Net | src/models package.
 
-Modules: dinov3.py, vjepa.py, fusion.py, heads.py, detector.py
-Owners : Orang A (dinov3), Orang B (vjepa), Orang C (fusion, heads, detector)
+Modules: dino_branch.py (Person 1), vjepa_branch.py (Person 2), stafnet.py (Person 3)
 """
 
 # PLACEHOLDER: no exports yet.

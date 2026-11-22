@@ -1,5 +1,0 @@
-# STARD | configs/ablation/concat_fusion.yaml
-# Status: PLACEHOLDER - ablation: simple concatenation instead of gated fusion.
-#
-# Inherits : configs/fusion_full.yaml
-# Override : model.fusion_type = concat

@@ -1,6 +1,0 @@
-# STARD | configs/vjepa_baseline.yaml
-# Status: PLACEHOLDER - unimodal temporal baseline (Orang B).
-#
-# Inherits : configs/base.yaml
-# Model    : V-JEPA 2.1 ViT-B temporal backbone + multi-task heads
-# Masks    : temporal only

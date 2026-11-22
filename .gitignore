@@ -7,9 +7,26 @@ __pycache__/
 .venv/
 venv/
 
-# Datasets & experiment outputs (local only)
-datasets/
-outputs/
+# Local planning documents (kept out of VCS on purpose)
+STAF-Net_DFDC_Fine-Tuning_Plan.md
+
+# Dataset artifacts (local only, keep the .gitkeep markers)
+data/raw/*
+data/manifests/*
+data/clips/*
+data/features/*
+!data/raw/.gitkeep
+!data/manifests/.gitkeep
+!data/clips/.gitkeep
+!data/features/.gitkeep
+
+# Experiment outputs
+checkpoints/*
+results/metrics/*
+results/plots/*
+!checkpoints/.gitkeep
+!results/metrics/.gitkeep
+!results/plots/.gitkeep
 
 # Weights, datasets, archives
 *.pt
