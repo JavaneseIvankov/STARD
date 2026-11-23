@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import zlib
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -331,8 +332,12 @@ def run(
         if target.exists() and not overwrite:
             report.skipped_existing += 1
             continue
+        # Per-video seed: reproducible across runs (same video -> same clip) while
+        # still spreading the sampled window across the video. A fixed global
+        # seed would pin every clip to the same relative offset.
+        seed = zlib.crc32(row.video_id.encode("utf-8")) % (2**31)
         try:
-            payload = process_video(row, cfg)
+            payload = process_video(row, cfg, seed=seed)
         except (VideoDecodeError, NoFaceError) as exc:
             report.record_failure(row.video_id, f"{type(exc).__name__}: {exc}")
             continue
