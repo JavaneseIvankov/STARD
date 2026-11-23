@@ -174,7 +174,18 @@ def _load_engine() -> dict[str, object]:
         "source_face": source_face,
         "gpu_name": torch.cuda.get_device_name(0) if device.type == "cuda" else "CPU",
     })
-    print(f"[STAF-Net Demo] Ready in {time.perf_counter() - t0:.1f}s on {_ENGINE['gpu_name']}.", flush=True)
+    # Pre-warm GPU kernels (DINOv3 + V-JEPA 2.1 + InSwapper-128) right away on startup
+    try:
+        dummy_clip = np.zeros((VJEPA_FRAMES, VJEPA_SIZE, VJEPA_SIZE, 3), dtype=np.uint8)
+        _ = _run_inference(dummy_clip)
+        if face_analyzer is not None and swapper_model is not None and source_face is not None:
+            src_bgr = cv2.imread(str(SOURCE_FACE_PATH))
+            if src_bgr is not None:
+                _ = swapper_model.get(src_bgr, source_face, source_face, paste_back=True)
+        print("[STRAD Demo] GPU warmup complete — live inference ready immediately.", flush=True)
+    except Exception as exc:
+        print(f"[STRAD Demo] Warmup warning: {exc}", flush=True)
+    print(f"[STRAD Demo] Ready in {time.perf_counter() - t0:.1f}s on {_ENGINE['gpu_name']}.", flush=True)
     return _ENGINE
 
 
@@ -441,6 +452,84 @@ def _apply_neural_face_swap(crops_rgb: np.ndarray, eng: dict[str, object]) -> tu
     return np.stack(swapped_rgb, axis=0), swapped_count, round((time.perf_counter() - t0) * 1000.0, 1)
 
 
+def _encode_loop_mp4_b64(crops_rgb: np.ndarray, work_dir: Path) -> str | None:
+    """Encode 16 RGB frames (384x384) into a compact H.264 looping MP4 data URI."""
+    raw_avi = work_dir / "loop_raw.mp4"
+    out_mp4 = work_dir / "loop_h264.mp4"
+    h, w = crops_rgb.shape[1], crops_rgb.shape[2]
+    writer = cv2.VideoWriter(str(raw_avi), cv2.VideoWriter_fourcc(*"mp4v"), 8.0, (w, h))
+    for fr in crops_rgb:
+        writer.write(cv2.cvtColor(fr, cv2.COLOR_RGB2BGR))
+    writer.release()
+    cmd = [
+        "ffmpeg", "-y", "-i", str(raw_avi),
+        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart", str(out_mp4),
+    ]
+    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if proc.returncode != 0 or not out_mp4.exists():
+        return None
+    return "data:video/mp4;base64," + base64.b64encode(out_mp4.read_bytes()).decode("ascii")
+
+
+@app.post("/api/set_swap_face")
+async def set_swap_face(image: UploadFile = File(...)) -> JSONResponse:
+    """Upload a new portrait photo to use as the live InSwapper-128 source face."""
+    eng = _load_engine()
+    analyzer = eng.get("face_analyzer")
+    if analyzer is None:
+        raise HTTPException(status_code=503, detail="InsightFace analyzer not loaded.")
+    raw = await image.read()
+    arr = np.frombuffer(raw, dtype=np.uint8)
+    bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if bgr is None:
+        raise HTTPException(status_code=400, detail="Invalid image file.")
+    with _LOCK:
+        faces = analyzer.get(bgr)
+        if not faces:
+            raise HTTPException(status_code=400, detail="No face detected in the uploaded photo. Try a clearer front-facing portrait.")
+        best = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
+        eng["source_face"] = best
+    # Return compact preview thumbnail
+    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+    pil_img = Image.fromarray(rgb)
+    pil_img.thumbnail((224, 224))
+    buf = io.BytesIO()
+    pil_img.save(buf, format="JPEG", quality=85)
+    thumb_b64 = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+    return JSONResponse({"status": "ok", "thumb_b64": thumb_b64})
+
+
+@app.post("/api/swap_frame")
+async def swap_frame(frame: UploadFile = File(...)) -> JSONResponse:
+    """Real-time single-frame InSwapper-128 inference for live webcam preview."""
+    eng = _load_engine()
+    analyzer = eng.get("face_analyzer")
+    swapper = eng.get("swapper")
+    src_face = eng.get("source_face")
+    if analyzer is None or swapper is None or src_face is None:
+        raise HTTPException(status_code=503, detail="InSwapper-128 not loaded.")
+    raw = await frame.read()
+    arr = np.frombuffer(raw, dtype=np.uint8)
+    bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if bgr is None:
+        raise HTTPException(status_code=400, detail="Invalid frame.")
+    swapped = False
+    with _LOCK:
+        faces = analyzer.get(bgr)
+        if faces:
+            tgt = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
+            bgr = swapper.get(bgr, tgt, src_face, paste_back=True)
+            swapped = True
+    ok, enc = cv2.imencode(".jpg", bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to encode frame.")
+    return JSONResponse({
+        "swapped": swapped,
+        "frame_b64": "data:image/jpeg;base64," + base64.b64encode(enc.tobytes()).decode("ascii"),
+    })
+
+
 @app.post("/api/predict")
 async def predict(
     stock_id: str | None = Form(default=None),
@@ -480,12 +569,14 @@ async def predict(
         with _LOCK:
             if neural_swap == "1":
                 crops_rgb, swapped_frames, swap_ms = _apply_neural_face_swap(crops_rgb, eng)
-                source_label = f"{source_label} + InSwapper-128 AI Deepfake ({swapped_frames}/16f)"
+                source_label = f"{source_label} + InSwapper-128 ({swapped_frames}/16f)"
             result = _run_inference(crops_rgb)
 
+        loop_video_b64 = _encode_loop_mp4_b64(crops_rgb, tmp_dir)
         result["source"] = source_label
         result["face_detected"] = face_detected
         result["ground_truth"] = gt
         result["swap_ms"] = swap_ms
         result["swapped_frames"] = swapped_frames
+        result["loop_video_b64"] = loop_video_b64
         return JSONResponse(result)
