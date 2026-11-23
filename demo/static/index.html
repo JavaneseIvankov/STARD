@@ -320,6 +320,9 @@
         </div>
 
         <div class="btn-row">
+          <select id="camSelect" class="btn btn-secondary" style="flex:1.1; font-size:0.84rem;" onchange="if(camStream) startCamera()">
+            <option value="">Default Camera</option>
+          </select>
           <button class="btn btn-secondary" id="btnStartCam" onclick="startCamera()">Enable Camera</button>
           <button class="btn btn-primary" id="btnRecCam" onclick="recordAndDetect()" disabled>Record 2.5s & Detect</button>
         </div>
@@ -607,16 +610,48 @@
       animFrameId = requestAnimationFrame(renderCameraLoop);
     }
 
+    async function refreshCameraList() {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const cams = devices.filter(d => d.kind === "videoinput");
+        const sel = document.getElementById("camSelect");
+        const prev = sel.value;
+        sel.innerHTML = "";
+        cams.forEach((c, i) => {
+          const opt = document.createElement("option");
+          opt.value = c.deviceId;
+          opt.textContent = c.label || `Camera ${i + 1}`;
+          sel.appendChild(opt);
+        });
+        if (prev && cams.some(c => c.deviceId === prev)) {
+          sel.value = prev;
+        } else {
+          // Auto-prefer "Phone Camera" if present
+          const phone = cams.find(c => /phone/i.test(c.label));
+          if (phone) sel.value = phone.deviceId;
+        }
+      } catch {}
+    }
+
     async function startCamera() {
       try {
-        camStream = await navigator.mediaDevices.getUserMedia({ video: { width: 480, height: 360 }, audio: false });
+        if (camStream) {
+          camStream.getTracks().forEach(t => t.stop());
+        }
+        const sel = document.getElementById("camSelect");
+        const devId = sel && sel.value ? { exact: sel.value } : undefined;
+        camStream = await navigator.mediaDevices.getUserMedia({
+          video: { deviceId: devId, width: 480, height: 360 },
+          audio: false
+        });
+        await refreshCameraList();
         const vid = document.getElementById("camHiddenVideo");
         vid.srcObject = camStream;
         await vid.play();
         if (animFrameId) cancelAnimationFrame(animFrameId);
         renderCameraLoop();
         document.getElementById("btnRecCam").disabled = false;
-        document.getElementById("btnStartCam").textContent = "Camera Active";
+        document.getElementById("btnStartCam").textContent = "Switch / Restart";
         document.getElementById("statusText").textContent = "Camera ready. Toggle AI Deepfake (InSwapper-128) for live neural swap, then Record 2.5s & Detect.";
       } catch (err) {
         document.getElementById("statusText").textContent = "Camera access denied or requires HTTPS / localhost: " + err.message;
