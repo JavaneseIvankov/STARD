@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>STAF-Net · Live Deepfake Detection Demo</title>
+  <style>
+    :root {
+      --bg: #f4f7f9;
+      --card: #ffffff;
+      --teal: #0f766e;
+      --teal-soft: #e6f4f1;
+      --blue: #0072b2;
+      --orange: #d55e00;
+      --red: #c53030;
+      --red-soft: #fde8e8;
+      --text: #111827;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    header h1 { margin: 0; font-size: 1.25rem; color: var(--teal); }
+    header p { margin: 2px 0 0; font-size: 0.86rem; color: var(--muted); }
+    .pill {
+      font-size: 0.78rem;
+      background: var(--teal-soft);
+      color: var(--teal);
+      padding: 5px 11px;
+      border-radius: 999px;
+      font-weight: 600;
+    }
+    main {
+      max-width: 1180px;
+      margin: 22px auto;
+      padding: 0 18px 36px;
+      display: grid;
+      grid-template-columns: 1fr 1.12fr;
+      gap: 20px;
+    }
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+    }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 10px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #f9fafb;
+      color: var(--text);
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tab-btn.active {
+      background: var(--teal);
+      color: #fff;
+      border-color: var(--teal);
+    }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .stock-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .stock-item {
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      padding: 9px 11px;
+      cursor: pointer;
+      background: #fff;
+      transition: all 0.15s;
+    }
+    .stock-item:hover { border-color: #99f6e4; }
+    .stock-item.selected {
+      border-color: var(--teal);
+      background: var(--teal-soft);
+    }
+    .stock-item .t { font-size: 0.85rem; font-weight: 600; }
+    .stock-item .s { font-size: 0.74rem; color: var(--muted); margin-top: 2px; }
+    video {
+      width: 100%;
+      border-radius: 12px;
+      background: #0f172a;
+      max-height: 310px;
+      object-fit: contain;
+    }
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .btn {
+      flex: 1;
+      padding: 12px 16px;
+      border: none;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.94rem;
+      cursor: pointer;
+    }
+    .btn-primary { background: var(--teal); color: #fff; }
+    .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn-secondary { background: #e5e7eb; color: var(--text); }
+    .status {
+      margin-top: 10px;
+      font-size: 0.85rem;
+      color: var(--muted);
+      min-height: 20px;
+    }
+    .verdict {
+      border-radius: 14px;
+      padding: 16px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      background: #f3f4f6;
+    }
+    .verdict.fake { background: var(--red-soft); border: 1.5px solid #fca5a5; }
+    .verdict.real { background: var(--teal-soft); border: 1.5px solid #5eead4; }
+    .verdict-label { font-size: 1.55rem; font-weight: 800; letter-spacing: 0.02em; }
+    .verdict.fake .verdict-label { color: var(--red); }
+    .verdict.real .verdict-label { color: var(--teal); }
+    .verdict-meta { text-align: right; font-size: 0.82rem; color: var(--muted); }
+    .verdict-score { font-size: 1.35rem; font-weight: 700; color: var(--text); }
+    .bar-block { margin-bottom: 12px; }
+    .bar-head {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      margin-bottom: 4px;
+    }
+    .bar-track {
+      height: 11px;
+      background: #e5e7eb;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      transition: width 0.35s ease;
+    }
+    .attn-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 16px;
+    }
+    .attn-card {
+      text-align: center;
+      background: #f9fafb;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px;
+    }
+    .attn-card img {
+      width: 100%;
+      border-radius: 8px;
+      display: block;
+      aspect-ratio: 1 / 1;
+      object-fit: cover;
+      background: #111827;
+    }
+    .attn-card .cap {
+      font-size: 0.76rem;
+      font-weight: 600;
+      margin-top: 6px;
+      color: var(--text);
+    }
+    .attn-card .sub {
+      font-size: 0.7rem;
+      color: var(--muted);
+    }
+    .placeholder {
+      text-align: center;
+      padding: 58px 20px;
+      color: var(--muted);
+    }
+    .gt-badge {
+      display: inline-block;
+      margin-top: 4px;
+      font-size: 0.75rem;
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: rgba(17, 24, 39, 0.08);
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>STAF-Net · Deepfake Video Detection</h1>
+      <p>Dual-Branch Fusion of DINOv3 ViT-S/16 (Spatial) + V-JEPA 2.1 ViT-B/16 (Spatiotemporal) · 0.903 Test AUROC</p>
+    </div>
+    <span class="pill" id="gpuBadge">Connecting GPU...</span>
+  </header>
+
+  <main>
+    <!-- LEFT: INPUTS -->
+    <section class="card">
+      <div class="tabs">
+        <button class="tab-btn active" id="tabStock" onclick="switchTab('stock')">1. Stock DFDC Videos</button>
+        <button class="tab-btn" id="tabCam" onclick="switchTab('cam')">2. Live Camera</button>
+      </div>
+
+      <!-- TAB 1: STOCK VIDEOS -->
+      <div class="panel active" id="panelStock">
+        <div class="stock-list" id="stockList"></div>
+        <video id="stockPlayer" controls playsinline muted loop></video>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btnRunStock" onclick="runStock()">Run STAF-Net Detection</button>
+        </div>
+      </div>
+
+      <!-- TAB 2: LIVE CAMERA -->
+      <div class="panel" id="panelCam">
+        <video id="camPreview" autoplay playsinline muted></video>
+        <div class="btn-row">
+          <button class="btn btn-secondary" id="btnStartCam" onclick="startCamera()">Enable Camera</button>
+          <button class="btn btn-primary" id="btnRecCam" onclick="recordAndDetect()" disabled>Record 2.5s & Detect</button>
+        </div>
+        <p style="font-size:0.78rem; color:var(--muted); margin:10px 0 0;">
+          Captures a 2.5-second face clip directly from your webcam, extracts 16 tracked face frames on the RTX 3060, and runs both DINOv3 + V-JEPA 2.1 live.
+        </p>
+      </div>
+
+      <div class="status" id="statusText">Select a stock video or enable your camera to begin.</div>
+    </section>
+
+    <!-- RIGHT: OUTPUTS -->
+    <section class="card">
+      <div id="resultPlaceholder" class="placeholder">
+        <h3 style="margin:0 0 8px; color:var(--text);">How STAF-Net Works</h3>
+        <p style="margin:0; font-size:0.9rem; line-height:1.5;">
+          Pick a stock video or record from your camera to see live predictions from
+          <strong>V-JEPA 2.1</strong> (16-frame temporal motion), <strong>DINOv3</strong> (4-frame spatial artifacts),
+          <strong>Standardized Fusion</strong>, and real-time <strong>ViT Attention Maps</strong>.
+        </p>
+      </div>
+
+      <div id="resultBox" style="display:none;">
+        <div class="verdict" id="verdictBanner">
+          <div>
+            <div style="font-size:0.75rem; text-transform:uppercase; color:var(--muted); font-weight:700;" id="resSource"></div>
+            <div class="verdict-label" id="resVerdict">—</div>
+            <span class="gt-badge" id="resGT" style="display:none;"></span>
+          </div>
+          <div class="verdict-meta">
+            <div class="verdict-score" id="resScore">—</div>
+            <div>P(FAKE) · <span id="resMs">—</span> ms</div>
+            <div id="resFace"></div>
+          </div>
+        </div>
+
+        <div class="bar-block">
+          <div class="bar-head">
+            <strong>STAF-Net Dual-Branch Fusion (Approach 3)</strong>
+            <strong id="valFusion">0%</strong>
+          </div>
+          <div class="bar-track"><div class="bar-fill" id="barFusion" style="width:0%; background:var(--teal);"></div></div>
+        </div>
+
+        <div class="bar-block">
+          <div class="bar-head">
+            <span>V-JEPA 2.1 LoRA · Spatiotemporal 16f (Approach 1)</span>
+            <span id="valVjepa">0%</span>
+          </div>
+          <div class="bar-track"><div class="bar-fill" id="barVjepa" style="width:0%; background:var(--blue);"></div></div>
+        </div>
+
+        <div class="bar-block">
+          <div class="bar-head">
+            <span>DINOv3 LoRA · Spatial 4f (Approach 2)</span>
+            <span id="valDino">0%</span>
+          </div>
+          <div class="bar-track"><div class="bar-fill" id="barDino" style="width:0%; background:var(--orange);"></div></div>
+        </div>
+
+        <div class="attn-grid">
+          <div class="attn-card">
+            <img id="imgFace" alt="Tracked face crop" />
+            <div class="cap">1. Tracked Face Crop</div>
+            <div class="sub">Haar bbox + 20% margin</div>
+          </div>
+          <div class="attn-card">
+            <img id="imgDino" alt="DINOv3 attention map" />
+            <div class="cap">2. DINOv3 Attention</div>
+            <div class="sub">Spatial seams & texture</div>
+          </div>
+          <div class="attn-card">
+            <img id="imgVjepa" alt="V-JEPA attention map" />
+            <div class="cap">3. V-JEPA 2.1 Attention</div>
+            <div class="sub">16-frame motion regions</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    let stockItems = [];
+    let selectedStock = null;
+    let camStream = null;
+
+    async function init() {
+      try {
+        const h = await fetch("/api/health").then(r => r.json());
+        document.getElementById("gpuBadge").textContent = "Live on " + h.gpu;
+      } catch {
+        document.getElementById("gpuBadge").textContent = "Server Offline";
+      }
+      const res = await fetch("/api/stock");
+      stockItems = await res.json();
+      const list = document.getElementById("stockList");
+      list.innerHTML = "";
+      stockItems.forEach((item, idx) => {
+        const div = document.createElement("div");
+        div.className = "stock-item" + (idx === 0 ? " selected" : "");
+        div.innerHTML = `<div class="t">${item.title}</div><div class="s">${item.subtitle}</div>`;
+        div.onclick = () => selectStock(item, div);
+        list.appendChild(div);
+      });
+      if (stockItems.length > 0) selectStock(stockItems[0], list.firstChild);
+    }
+
+    function selectStock(item, el) {
+      selectedStock = item;
+      document.querySelectorAll(".stock-item").forEach(n => n.classList.remove("selected"));
+      el.classList.add("selected");
+      const player = document.getElementById("stockPlayer");
+      player.src = item.url;
+      player.load();
+    }
+
+    function switchTab(mode) {
+      document.getElementById("tabStock").classList.toggle("active", mode === "stock");
+      document.getElementById("tabCam").classList.toggle("active", mode === "cam");
+      document.getElementById("panelStock").classList.toggle("active", mode === "stock");
+      document.getElementById("panelCam").classList.toggle("active", mode === "cam");
+    }
+
+    function setBusy(busy, msg) {
+      document.getElementById("btnRunStock").disabled = busy;
+      document.getElementById("btnRecCam").disabled = busy || !camStream;
+      document.getElementById("statusText").textContent = msg;
+    }
+
+    function renderResult(data) {
+      document.getElementById("resultPlaceholder").style.display = "none";
+      document.getElementById("resultBox").style.display = "block";
+
+      const isFake = data.verdict === "FAKE";
+      const banner = document.getElementById("verdictBanner");
+      banner.className = "verdict " + (isFake ? "fake" : "real");
+      document.getElementById("resSource").textContent = data.source;
+      document.getElementById("resVerdict").textContent = isFake ? "FAKE DETECTED" : "AUTHENTIC REAL";
+      document.getElementById("resScore").textContent = (data.fusion_prob * 100).toFixed(1) + "%";
+      document.getElementById("resMs").textContent = data.inference_ms;
+      document.getElementById("resFace").textContent = data.face_detected ? "Face tracked (Haar)" : "Center crop fallback";
+
+      const gtEl = document.getElementById("resGT");
+      if (data.ground_truth) {
+        gtEl.style.display = "inline-block";
+        gtEl.textContent = "DFDC Ground Truth: " + data.ground_truth;
+      } else {
+        gtEl.style.display = "none";
+      }
+
+      const setBar = (idBar, idVal, prob) => {
+        const pct = (prob * 100).toFixed(1) + "%";
+        document.getElementById(idBar).style.width = pct;
+        document.getElementById(idVal).textContent = pct;
+      };
+      setBar("barFusion", "valFusion", data.fusion_prob);
+      setBar("barVjepa", "valVjepa", data.vjepa_prob);
+      setBar("barDino", "valDino", data.dino_prob);
+
+      document.getElementById("imgFace").src = data.face_crop_b64;
+      document.getElementById("imgDino").src = data.dino_attn_b64;
+      document.getElementById("imgVjepa").src = data.vjepa_attn_b64;
+    }
+
+    async function runStock() {
+      if (!selectedStock) return;
+      setBusy(true, "Running DINOv3 + V-JEPA 2.1 + Attention Maps on GPU...");
+      try {
+        const fd = new FormData();
+        fd.append("stock_id", selectedStock.id);
+        const res = await fetch("/api/predict", { method: "POST", body: fd });
+        if (!res.ok) throw new Error((await res.json()).detail || "Inference failed");
+        const data = await res.json();
+        renderResult(data);
+        setBusy(false, `Done in ${data.inference_ms} ms on ${data.gpu}.`);
+      } catch (err) {
+        setBusy(false, "Error: " + err.message);
+      }
+    }
+
+    async function startCamera() {
+      try {
+        camStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
+        document.getElementById("camPreview").srcObject = camStream;
+        document.getElementById("btnRecCam").disabled = false;
+        document.getElementById("btnStartCam").textContent = "Camera Active";
+        document.getElementById("statusText").textContent = "Camera ready. Look at the camera and click Record 2.5s & Detect.";
+      } catch (err) {
+        document.getElementById("statusText").textContent = "Camera access denied or requires HTTPS / localhost: " + err.message;
+      }
+    }
+
+    async function recordAndDetect() {
+      if (!camStream) return;
+      setBusy(true, "Recording 2.5 seconds from webcam...");
+      const chunks = [];
+      const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp8") ? "video/webm;codecs=vp8" : "video/webm";
+      const rec = new MediaRecorder(camStream, { mimeType: mime });
+      rec.ondataavailable = e => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+      rec.onstop = async () => {
+        setBusy(true, "Uploading clip & running STAF-Net on RTX 3060...");
+        try {
+          const blob = new Blob(chunks, { type: mime });
+          const fd = new FormData();
+          fd.append("video", blob, "camera_capture.webm");
+          const res = await fetch("/api/predict", { method: "POST", body: fd });
+          if (!res.ok) throw new Error((await res.json()).detail || "Inference failed");
+          const data = await res.json();
+          renderResult(data);
+          setBusy(false, `Live camera analyzed in ${data.inference_ms} ms on ${data.gpu}.`);
+        } catch (err) {
+          setBusy(false, "Error: " + err.message);
+        }
+      };
+      rec.start();
+      setTimeout(() => rec.stop(), 2500);
+    }
+
+    init();
+  </script>
+</body>
+</html>
