@@ -63,6 +63,7 @@ from src.contracts import VJEPA_FRAMES, ManifestRow
 
 __all__ = [
     "PREPROCESSING_VERSION",
+    "select_shard",
     "FaceTrackConfig",
     "PreprocessReport",
     "VideoDecodeError",
@@ -109,6 +110,29 @@ class FaceTrackConfig:
                 f"FaceTrackConfig.output_size: must be >= 224 (crops are downscaled to "
                 f"224 for DINO and upscaled to 384 for V-JEPA), got {self.output_size}"
             )
+
+
+def select_shard(rows: list[ManifestRow], shard: str) -> list[ManifestRow]:
+    """Return the rows belonging to one shard of a parallel preprocessing run.
+
+    Partitioning is by hash of video_id, not by list position, so every shard
+    gets a similar mix of real/fake and archive parts, and the assignment stays
+    stable when the manifest is regenerated with a different seed.
+
+    The shard spec is INDEX/TOTAL, e.g. 0/4.
+    """
+    try:
+        index_text, total_text = shard.split("/")
+        index, total = int(index_text), int(total_text)
+    except ValueError as exc:
+        raise ValueError(f"select_shard: expected INDEX/TOTAL, got {shard!r}") from exc
+    if total < 1 or not 0 <= index < total:
+        raise ValueError(f"select_shard: invalid shard {shard!r} (need 0 <= INDEX < TOTAL)")
+
+    def bucket(row: ManifestRow) -> int:
+        return zlib.crc32(row.video_id.encode("utf-8")) % total
+
+    return [row for row in rows if bucket(row) == index]
 
 
 def sample_indices(total_frames: int, fps: float, cfg: FaceTrackConfig, seed: int = 0) -> list[int]:
@@ -361,6 +385,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--detector", default="haar", choices=("haar", "retinaface"))
     parser.add_argument("--output-size", type=int, default=384)
+    parser.add_argument(
+        "--shard",
+        default=None,
+        help="process only one shard, e.g. 0/4; lets several processes share the work",
+    )
     args = parser.parse_args(argv)
 
     manifest_path = Path(args.manifest)
@@ -378,11 +407,18 @@ def main(argv: list[str] | None = None) -> int:
     from src.data.video_dataset import read_manifest
 
     rows = read_manifest(manifest_path)
+    if args.shard:
+        rows = select_shard(rows, args.shard)
+        print(f"[info] shard {args.shard}: {len(rows)} videos")
+
     cfg = FaceTrackConfig(detector=args.detector, output_size=args.output_size)
     report = run(rows, args.out, cfg, overwrite=args.overwrite, limit=args.limit)
 
     summary = report.summary()
     report_path = Path(args.report)
+    if args.shard and args.report == "data/manifests/preprocess_report.json":
+        index, total = args.shard.split("/")
+        report_path = report_path.with_name(f"preprocess_report_shard{index}of{total}.json")
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
