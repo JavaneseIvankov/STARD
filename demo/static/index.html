@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>STAF-Net · Live Deepfake Detection Demo</title>
+  <title>STRAD · Live Deepfake Detection Demo</title>
   <style>
     :root {
       --bg: #f4f7f9;
@@ -107,17 +107,41 @@
     }
     .stock-item .t { font-size: 0.85rem; font-weight: 600; }
     .stock-item .s { font-size: 0.74rem; color: var(--muted); margin-top: 2px; }
-    video {
+    video, canvas.cam-stage {
       width: 100%;
       border-radius: 12px;
       background: #0f172a;
       max-height: 310px;
       object-fit: contain;
+      display: block;
+    }
+    .filter-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin: 10px 0 12px;
+    }
+    .filter-btn {
+      padding: 8px 6px;
+      font-size: 0.76rem;
+      font-weight: 600;
+      border-radius: 9px;
+      border: 1.5px solid var(--border);
+      background: #f9fafb;
+      color: var(--text);
+      cursor: pointer;
+      transition: all 0.15s;
+      text-align: center;
+    }
+    .filter-btn.active {
+      border-color: var(--teal);
+      background: var(--teal-soft);
+      color: var(--teal);
     }
     .btn-row {
       display: flex;
       gap: 10px;
-      margin-top: 14px;
+      margin-top: 12px;
     }
     .btn {
       flex: 1;
@@ -221,8 +245,8 @@
 <body>
   <header>
     <div>
-      <h1>STAF-Net · Deepfake Video Detection</h1>
-      <p>Dual-Branch Fusion of DINOv3 ViT-S/16 (Spatial) + V-JEPA 2.1 ViT-B/16 (Spatiotemporal) · 0.903 Test AUROC</p>
+      <h1>STRAD · Deepfake Video Detection</h1>
+      <p>Std-Concat Dual-Branch Fusion: DINOv3 ViT-S/16 (Spatial) + V-JEPA 2.1 ViT-B/16 (Spatiotemporal) · 0.903 Test AUROC</p>
     </div>
     <span class="pill" id="gpuBadge">Connecting GPU...</span>
   </header>
@@ -232,7 +256,7 @@
     <section class="card">
       <div class="tabs">
         <button class="tab-btn active" id="tabStock" onclick="switchTab('stock')">1. Stock DFDC Videos</button>
-        <button class="tab-btn" id="tabCam" onclick="switchTab('cam')">2. Live Camera</button>
+        <button class="tab-btn" id="tabCam" onclick="switchTab('cam')">2. Live Camera + Filters</button>
       </div>
 
       <!-- TAB 1: STOCK VIDEOS -->
@@ -240,19 +264,31 @@
         <div class="stock-list" id="stockList"></div>
         <video id="stockPlayer" controls playsinline muted loop></video>
         <div class="btn-row">
-          <button class="btn btn-primary" id="btnRunStock" onclick="runStock()">Run STAF-Net Detection</button>
+          <button class="btn btn-primary" id="btnRunStock" onclick="runStock()">Run STRAD Detection</button>
         </div>
       </div>
 
-      <!-- TAB 2: LIVE CAMERA -->
+      <!-- TAB 2: LIVE CAMERA WITH FACE FILTERS -->
       <div class="panel" id="panelCam">
-        <video id="camPreview" autoplay playsinline muted></video>
+        <video id="camHiddenVideo" autoplay playsinline muted style="display:none;"></video>
+        <canvas id="camCanvas" class="cam-stage" width="640" height="480"></canvas>
+
+        <div style="font-size:0.78rem; font-weight:600; color:var(--muted); margin-top:10px;">
+          Live Face Filter (recorded directly into test clip):
+        </div>
+        <div class="filter-row">
+          <button class="filter-btn active" id="flt-none" onclick="setFilter('none')">No Filter (Real)</button>
+          <button class="filter-btn" id="flt-swap" onclick="setFilter('swap')">Face Swap Mask</button>
+          <button class="filter-btn" id="flt-warp" onclick="setFilter('warp')">Face Warp</button>
+          <button class="filter-btn" id="flt-beauty" onclick="setFilter('beauty')">AI Beauty / Smooth</button>
+        </div>
+
         <div class="btn-row">
           <button class="btn btn-secondary" id="btnStartCam" onclick="startCamera()">Enable Camera</button>
           <button class="btn btn-primary" id="btnRecCam" onclick="recordAndDetect()" disabled>Record 2.5s & Detect</button>
         </div>
         <p style="font-size:0.78rem; color:var(--muted); margin:10px 0 0;">
-          Captures a 2.5-second face clip directly from your webcam, extracts 16 tracked face frames on the RTX 3060, and runs both DINOv3 + V-JEPA 2.1 live.
+          Align your face in the center oval. Try <strong>No Filter</strong> first, then switch to <strong>Face Swap Mask</strong> or <strong>Face Warp</strong> to see STRAD catch live facial manipulation!
         </p>
       </div>
 
@@ -262,11 +298,11 @@
     <!-- RIGHT: OUTPUTS -->
     <section class="card">
       <div id="resultPlaceholder" class="placeholder">
-        <h3 style="margin:0 0 8px; color:var(--text);">How STAF-Net Works</h3>
+        <h3 style="margin:0 0 8px; color:var(--text);">How STRAD Works</h3>
         <p style="margin:0; font-size:0.9rem; line-height:1.5;">
-          Pick a stock video or record from your camera to see live predictions from
-          <strong>V-JEPA 2.1</strong> (16-frame temporal motion), <strong>DINOv3</strong> (4-frame spatial artifacts),
-          <strong>Standardized Fusion</strong>, and real-time <strong>ViT Attention Maps</strong>.
+          Pick a stock video or record from your camera (with optional live face-changing filters) to see predictions from
+          <strong>V-JEPA 2.1</strong> (16-frame temporal), <strong>DINOv3</strong> (4-frame spatial),
+          <strong>STRAD Std-Concat Fusion</strong>, and real-time <strong>ViT Attention Maps</strong>.
         </p>
       </div>
 
@@ -286,7 +322,7 @@
 
         <div class="bar-block">
           <div class="bar-head">
-            <strong>STAF-Net Dual-Branch Fusion (Approach 3)</strong>
+            <strong>STRAD Std-Concat Fusion (Approach 3 · 0.903 AUROC)</strong>
             <strong id="valFusion">0%</strong>
           </div>
           <div class="bar-track"><div class="bar-fill" id="barFusion" style="width:0%; background:var(--teal);"></div></div>
@@ -333,6 +369,23 @@
     let stockItems = [];
     let selectedStock = null;
     let camStream = null;
+    let activeFilter = "none";
+    let animFrameId = null;
+
+    // Preload real face texture for the Face Swap Mask filter
+    const swapImg = new Image();
+    swapImg.src = "/static/swap_face.png";
+
+    // Offscreen scratch canvas for pixel warp & feathered mask
+    const scratchCanvas = document.createElement("canvas");
+    scratchCanvas.width = 640;
+    scratchCanvas.height = 480;
+    const scratchCtx = scratchCanvas.getContext("2d", { willReadFrequently: true });
+
+    const maskCanvas = document.createElement("canvas");
+    maskCanvas.width = 240;
+    maskCanvas.height = 290;
+    const maskCtx = maskCanvas.getContext("2d");
 
     async function init() {
       try {
@@ -369,6 +422,13 @@
       document.getElementById("tabCam").classList.toggle("active", mode === "cam");
       document.getElementById("panelStock").classList.toggle("active", mode === "stock");
       document.getElementById("panelCam").classList.toggle("active", mode === "cam");
+    }
+
+    function setFilter(name) {
+      activeFilter = name;
+      ["none", "swap", "warp", "beauty"].forEach(f => {
+        document.getElementById("flt-" + f).classList.toggle("active", f === name);
+      });
     }
 
     function setBusy(busy, msg) {
@@ -414,7 +474,7 @@
 
     async function runStock() {
       if (!selectedStock) return;
-      setBusy(true, "Running DINOv3 + V-JEPA 2.1 + Attention Maps on GPU...");
+      setBusy(true, "Running DINOv3 + V-JEPA 2.1 + Std-Concat + Attention Maps on GPU...");
       try {
         const fd = new FormData();
         fd.append("stock_id", selectedStock.id);
@@ -428,13 +488,109 @@
       }
     }
 
+    function renderCameraLoop() {
+      const vid = document.getElementById("camHiddenVideo");
+      const canvas = document.getElementById("camCanvas");
+      const ctx = canvas.getContext("2d");
+      const W = canvas.width, H = canvas.height;
+
+      if (vid.readyState >= 2) {
+        ctx.save();
+        // Mirror webcam horizontally for natural UX
+        ctx.translate(W, 0);
+        ctx.scale(-1, 1);
+
+        if (activeFilter === "beauty") {
+          // Heavy AI beauty smooth + skin tone glow + contrast shift
+          ctx.filter = "blur(2.2px) contrast(1.12) saturate(1.22) brightness(1.07)";
+          ctx.drawImage(vid, 0, 0, W, H);
+          ctx.filter = "none";
+        } else {
+          ctx.filter = "none";
+          ctx.drawImage(vid, 0, 0, W, H);
+        }
+        ctx.restore();
+
+        if (activeFilter === "swap" && swapImg.complete && swapImg.naturalWidth > 0) {
+          // Feathered real-face swap mask overlaid on center face oval with subtle temporal jitter
+          const t = performance.now() * 0.012;
+          const jx = Math.sin(t) * 2.5;
+          const jy = Math.cos(t * 1.3) * 2.0;
+          const mw = 230, mh = 280;
+          const cx = W / 2 + jx, cy = H / 2 - 8 + jy;
+
+          maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+          maskCtx.save();
+          maskCtx.beginPath();
+          maskCtx.ellipse(maskCanvas.width / 2, maskCanvas.height / 2, 102, 128, 0, 0, Math.PI * 2);
+          maskCtx.closePath();
+          maskCtx.clip();
+          maskCtx.filter = "contrast(1.06) saturate(0.95)";
+          maskCtx.drawImage(swapImg, 0, 0, maskCanvas.width, maskCanvas.height);
+          maskCtx.restore();
+
+          // Soft radial alpha feathering around the swap boundary
+          maskCtx.save();
+          maskCtx.globalCompositeOperation = "destination-in";
+          const grad = maskCtx.createRadialGradient(
+            maskCanvas.width / 2, maskCanvas.height / 2, 55,
+            maskCanvas.width / 2, maskCanvas.height / 2, 125
+          );
+          grad.addColorStop(0, "rgba(0,0,0,0.96)");
+          grad.addColorStop(0.72, "rgba(0,0,0,0.88)");
+          grad.addColorStop(1, "rgba(0,0,0,0)");
+          maskCtx.fillStyle = grad;
+          maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
+          maskCtx.restore();
+
+          ctx.drawImage(maskCanvas, cx - mw / 2, cy - mh / 2, mw, mh);
+        } else if (activeFilter === "warp") {
+          // Real-time geometric bulge/swirl face warp in the center face region
+          scratchCtx.clearRect(0, 0, W, H);
+          scratchCtx.drawImage(canvas, 0, 0);
+          const rx = 170, ry = 100, rw = 300, rh = 280;
+          const src = scratchCtx.getImageData(rx, ry, rw, rh);
+          const dst = ctx.createImageData(rw, rh);
+          const s = src.data, d = dst.data;
+          const cx = rw / 2, cy = rh / 2, rad = 135;
+          const phase = Math.sin(performance.now() * 0.004) * 0.12;
+          for (let y = 0; y < rh; y++) {
+            for (let x = 0; x < rw; x++) {
+              const dx = x - cx, dy = y - cy;
+              const dist = Math.hypot(dx, dy);
+              let sx = x, sy = y;
+              if (dist < rad && dist > 0.5) {
+                const pct = 1.0 - dist / rad;
+                const bulge = 1.0 - (0.34 + phase) * pct * pct;
+                const angle = 0.22 * pct * pct;
+                const nx = dx * bulge, ny = dy * bulge;
+                sx = Math.round(cx + nx * Math.cos(angle) - ny * Math.sin(angle));
+                sy = Math.round(cy + nx * Math.sin(angle) + ny * Math.cos(angle));
+                sx = Math.max(0, Math.min(rw - 1, sx));
+                sy = Math.max(0, Math.min(rh - 1, sy));
+              }
+              const si = (sy * rw + sx) * 4;
+              const di = (y * rw + x) * 4;
+              d[di] = s[si]; d[di+1] = s[si+1]; d[di+2] = s[si+2]; d[di+3] = 255;
+            }
+          }
+          ctx.putImageData(dst, rx, ry);
+        }
+      }
+      animFrameId = requestAnimationFrame(renderCameraLoop);
+    }
+
     async function startCamera() {
       try {
         camStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
-        document.getElementById("camPreview").srcObject = camStream;
+        const vid = document.getElementById("camHiddenVideo");
+        vid.srcObject = camStream;
+        await vid.play();
+        if (animFrameId) cancelAnimationFrame(animFrameId);
+        renderCameraLoop();
         document.getElementById("btnRecCam").disabled = false;
         document.getElementById("btnStartCam").textContent = "Camera Active";
-        document.getElementById("statusText").textContent = "Camera ready. Look at the camera and click Record 2.5s & Detect.";
+        document.getElementById("statusText").textContent = "Camera ready. Pick a filter (or No Filter) and click Record 2.5s & Detect.";
       } catch (err) {
         document.getElementById("statusText").textContent = "Camera access denied or requires HTTPS / localhost: " + err.message;
       }
@@ -442,22 +598,27 @@
 
     async function recordAndDetect() {
       if (!camStream) return;
-      setBusy(true, "Recording 2.5 seconds from webcam...");
+      const filterNames = { none: "No Filter", swap: "Face Swap Mask", warp: "Face Warp", beauty: "AI Beauty Smooth" };
+      setBusy(true, `Recording 2.5s (${filterNames[activeFilter]})...`);
+
+      const canvas = document.getElementById("camCanvas");
+      const stream = canvas.captureStream(25);
       const chunks = [];
       const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp8") ? "video/webm;codecs=vp8" : "video/webm";
-      const rec = new MediaRecorder(camStream, { mimeType: mime });
+      const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2500000 });
       rec.ondataavailable = e => { if (e.data && e.data.size > 0) chunks.push(e.data); };
       rec.onstop = async () => {
-        setBusy(true, "Uploading clip & running STAF-Net on RTX 3060...");
+        setBusy(true, "Uploading clip & running STRAD (Std-Concat) on RTX 3060...");
         try {
           const blob = new Blob(chunks, { type: mime });
           const fd = new FormData();
-          fd.append("video", blob, "camera_capture.webm");
+          fd.append("video", blob, `camera_${activeFilter}.webm`);
           const res = await fetch("/api/predict", { method: "POST", body: fd });
           if (!res.ok) throw new Error((await res.json()).detail || "Inference failed");
           const data = await res.json();
+          data.source = `Live Camera (${filterNames[activeFilter]})`;
           renderResult(data);
-          setBusy(false, `Live camera analyzed in ${data.inference_ms} ms on ${data.gpu}.`);
+          setBusy(false, `Live camera (${filterNames[activeFilter]}) analyzed in ${data.inference_ms} ms on ${data.gpu}.`);
         } catch (err) {
           setBusy(false, "Error: " + err.message);
         }

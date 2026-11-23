@@ -84,7 +84,7 @@ STOCK_CATALOG = [
     },
 ]
 
-app = FastAPI(title="STAF-Net Live Deepfake Detection Demo")
+app = FastAPI(title="STRAD Live Deepfake Detection Demo")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 _LOCK = threading.Lock()
