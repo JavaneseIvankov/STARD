@@ -279,8 +279,8 @@
         <div class="filter-row">
           <button class="filter-btn active" id="flt-none" onclick="setFilter('none')">No Filter (Real)</button>
           <button class="filter-btn" id="flt-swap" onclick="setFilter('swap')">Face Swap Mask</button>
-          <button class="filter-btn" id="flt-warp" onclick="setFilter('warp')">Face Warp</button>
-          <button class="filter-btn" id="flt-beauty" onclick="setFilter('beauty')">AI Beauty / Smooth</button>
+          <button class="filter-btn" id="flt-warp" onclick="setFilter('warp')">Extreme Face Warp</button>
+          <button class="filter-btn" id="flt-beauty" onclick="setFilter('beauty')">Deepfake Glitch</button>
         </div>
 
         <div class="btn-row">
@@ -499,45 +499,39 @@
         // Mirror webcam horizontally for natural UX
         ctx.translate(W, 0);
         ctx.scale(-1, 1);
-
-        if (activeFilter === "beauty") {
-          // Heavy AI beauty smooth + skin tone glow + contrast shift
-          ctx.filter = "blur(2.2px) contrast(1.12) saturate(1.22) brightness(1.07)";
-          ctx.drawImage(vid, 0, 0, W, H);
-          ctx.filter = "none";
-        } else {
-          ctx.filter = "none";
-          ctx.drawImage(vid, 0, 0, W, H);
-        }
+        ctx.filter = "none";
+        ctx.drawImage(vid, 0, 0, W, H);
         ctx.restore();
 
+        const now = performance.now();
+
         if (activeFilter === "swap" && swapImg.complete && swapImg.naturalWidth > 0) {
-          // Feathered real-face swap mask overlaid on center face oval with subtle temporal jitter
-          const t = performance.now() * 0.012;
-          const jx = Math.sin(t) * 2.5;
-          const jy = Math.cos(t * 1.3) * 2.0;
-          const mw = 230, mh = 280;
-          const cx = W / 2 + jx, cy = H / 2 - 8 + jy;
+          // Bold, unmistakable synthetic face-swap overlay with visible seam + flicker
+          const jx = Math.sin(now * 0.025) * 6.0;
+          const jy = Math.cos(now * 0.031) * 4.5;
+          const mw = 310, mh = 365;
+          const cx = W / 2 + jx, cy = H / 2 - 10 + jy;
 
           maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
           maskCtx.save();
           maskCtx.beginPath();
-          maskCtx.ellipse(maskCanvas.width / 2, maskCanvas.height / 2, 102, 128, 0, 0, Math.PI * 2);
+          maskCtx.ellipse(maskCanvas.width / 2, maskCanvas.height / 2, 112, 138, 0, 0, Math.PI * 2);
           maskCtx.closePath();
           maskCtx.clip();
-          maskCtx.filter = "contrast(1.06) saturate(0.95)";
+          const flick = 1.0 + Math.sin(now * 0.04) * 0.14;
+          maskCtx.filter = `contrast(1.18) saturate(1.25) brightness(${flick.toFixed(2)})`;
           maskCtx.drawImage(swapImg, 0, 0, maskCanvas.width, maskCanvas.height);
           maskCtx.restore();
 
-          // Soft radial alpha feathering around the swap boundary
+          // Hard-ish edge so the synthetic face swap is immediately obvious
           maskCtx.save();
           maskCtx.globalCompositeOperation = "destination-in";
           const grad = maskCtx.createRadialGradient(
-            maskCanvas.width / 2, maskCanvas.height / 2, 55,
-            maskCanvas.width / 2, maskCanvas.height / 2, 125
+            maskCanvas.width / 2, maskCanvas.height / 2, 78,
+            maskCanvas.width / 2, maskCanvas.height / 2, 136
           );
-          grad.addColorStop(0, "rgba(0,0,0,0.96)");
-          grad.addColorStop(0.72, "rgba(0,0,0,0.88)");
+          grad.addColorStop(0, "rgba(0,0,0,1)");
+          grad.addColorStop(0.82, "rgba(0,0,0,0.97)");
           grad.addColorStop(1, "rgba(0,0,0,0)");
           maskCtx.fillStyle = grad;
           maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
@@ -545,15 +539,15 @@
 
           ctx.drawImage(maskCanvas, cx - mw / 2, cy - mh / 2, mw, mh);
         } else if (activeFilter === "warp") {
-          // Real-time geometric bulge/swirl face warp in the center face region
+          // Dramatic, unmistakable funhouse bulge + swirl face distortion
           scratchCtx.clearRect(0, 0, W, H);
           scratchCtx.drawImage(canvas, 0, 0);
-          const rx = 170, ry = 100, rw = 300, rh = 280;
+          const rx = 100, ry = 40, rw = 440, rh = 400;
           const src = scratchCtx.getImageData(rx, ry, rw, rh);
           const dst = ctx.createImageData(rw, rh);
           const s = src.data, d = dst.data;
-          const cx = rw / 2, cy = rh / 2, rad = 135;
-          const phase = Math.sin(performance.now() * 0.004) * 0.12;
+          const cx = rw / 2, cy = rh / 2, rad = 205;
+          const wobble = Math.sin(now * 0.008) * 0.35;
           for (let y = 0; y < rh; y++) {
             for (let x = 0; x < rw; x++) {
               const dx = x - cx, dy = y - cy;
@@ -561,8 +555,9 @@
               let sx = x, sy = y;
               if (dist < rad && dist > 0.5) {
                 const pct = 1.0 - dist / rad;
-                const bulge = 1.0 - (0.34 + phase) * pct * pct;
-                const angle = 0.22 * pct * pct;
+                // Strong fisheye bulge + twisting swirl
+                const bulge = 1.0 - 0.62 * pct;
+                const angle = (0.85 + wobble) * pct * pct;
                 const nx = dx * bulge, ny = dy * bulge;
                 sx = Math.round(cx + nx * Math.cos(angle) - ny * Math.sin(angle));
                 sy = Math.round(cy + nx * Math.sin(angle) + ny * Math.cos(angle));
@@ -575,6 +570,31 @@
             }
           }
           ctx.putImageData(dst, rx, ry);
+        } else if (activeFilter === "beauty") {
+          // Obvious Deepfake Glitch: temporal RGB split + blocky horizontal face-tear slices + flicker
+          scratchCtx.clearRect(0, 0, W, H);
+          scratchCtx.drawImage(canvas, 0, 0);
+          const frameData = scratchCtx.getImageData(0, 0, W, H);
+          const out = ctx.createImageData(W, H);
+          const s = frameData.data, d = out.data;
+          const shift = Math.round(10 + Math.sin(now * 0.03) * 8);
+          for (let y = 0; y < H; y++) {
+            // Horizontal slice jitter on middle face bands
+            const band = ((y >> 4) + Math.floor(now / 70)) % 7 === 0 ? Math.round(Math.sin(now * 0.05 + y) * 22) : 0;
+            for (let x = 0; x < W; x++) {
+              const bx = Math.max(0, Math.min(W - 1, x + band));
+              const rx = Math.max(0, Math.min(W - 1, bx + shift));
+              const gx = bx;
+              const blx = Math.max(0, Math.min(W - 1, bx - shift));
+              const di = (y * W + x) * 4;
+              // Quantize slightly (posterize) for obvious synthetic texture
+              d[di]     = s[(y * W + rx) * 4] & 0xE0;
+              d[di + 1] = s[(y * W + gx) * 4 + 1] & 0xE0;
+              d[di + 2] = s[(y * W + blx) * 4 + 2] & 0xE0;
+              d[di + 3] = 255;
+            }
+          }
+          ctx.putImageData(out, 0, 0);
         }
       }
       animFrameId = requestAnimationFrame(renderCameraLoop);
@@ -598,7 +618,7 @@
 
     async function recordAndDetect() {
       if (!camStream) return;
-      const filterNames = { none: "No Filter", swap: "Face Swap Mask", warp: "Face Warp", beauty: "AI Beauty Smooth" };
+      const filterNames = { none: "No Filter", swap: "Face Swap Mask", warp: "Extreme Face Warp", beauty: "Deepfake Glitch" };
       setBusy(true, `Recording 2.5s (${filterNames[activeFilter]})...`);
 
       const canvas = document.getElementById("camCanvas");
