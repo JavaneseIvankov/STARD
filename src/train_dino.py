@@ -56,11 +56,12 @@ class TrainConfig:
         *,
         manifest: str = "data/manifests/manifest.csv",
         clips_dir: str = "data/clips",
+        weights: str | None = None,
         use_lora: bool = False,
         lora_rank: int = 8,
         lora_alpha: int = 16,
         lora_dropout: float = 0.05,
-        lora_targets: tuple[str, ...] = ("q_proj", "v_proj"),
+        lora_targets: tuple[str, ...] | None = None,
         lora_lr: float = 1e-4,
         head_lr: float = 5e-4,
         weight_decay: float = 0.01,
@@ -78,10 +79,13 @@ class TrainConfig:
     ) -> None:
         self.manifest = manifest
         self.clips_dir = clips_dir
+        self.weights = weights
         self.use_lora = use_lora
         self.lora_rank = lora_rank
         self.lora_alpha = lora_alpha
         self.lora_dropout = lora_dropout
+        # None -> DinoBranch picks the loader-correct set from LORA_TARGETS
+        # (q_proj/v_proj for transformers, qkv for timm).
         self.lora_targets = lora_targets
         self.lora_lr = lora_lr
         self.head_lr = head_lr
@@ -212,6 +216,7 @@ def train(cfg: TrainConfig) -> dict[str, object]:
         )
 
     model = DinoBranch(
+        pretrained_name=cfg.weights,
         pretrained=cfg.pretrained,
         use_lora=cfg.use_lora,
         lora_rank=cfg.lora_rank,
@@ -301,7 +306,7 @@ def train(cfg: TrainConfig) -> dict[str, object]:
                         "rank": cfg.lora_rank,
                         "alpha": cfg.lora_alpha,
                         "dropout": cfg.lora_dropout,
-                        "targets": list(cfg.lora_targets),
+                        "targets": list(cfg.lora_targets or model.lora_targets),
                     },
                     "epoch": epoch,
                     "val_metrics": metrics,
@@ -351,11 +356,21 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Stage I training: DINOv3 spatial branch.")
     parser.add_argument("--manifest", default="data/manifests/manifest.csv")
     parser.add_argument("--clips-dir", default="data/clips")
+    parser.add_argument(
+        "--weights",
+        default=None,
+        help="local DINOv3 weights directory (config.json + model.safetensors) or HF repo id",
+    )
     parser.add_argument("--frozen", action="store_true", help="train the head only (A1)")
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--lora-rank", type=int, default=8)
     parser.add_argument("--lora-alpha", type=int, default=16)
+    parser.add_argument(
+        "--lora-targets",
+        default=None,
+        help="comma-separated projection names; default = loader-correct set",
+    )
     parser.add_argument("--lora-lr", type=float, default=1e-4)
     parser.add_argument("--head-lr", type=float, default=5e-4)
     parser.add_argument("--amp", default="bf16", choices=("bf16", "fp16", "none"))
@@ -376,9 +391,11 @@ def main(argv: list[str] | None = None) -> int:
     cfg = TrainConfig(
         manifest=args.manifest,
         clips_dir=args.clips_dir,
+        weights=args.weights,
         use_lora=not args.frozen,
         lora_rank=args.lora_rank,
         lora_alpha=args.lora_alpha,
+        lora_targets=tuple(args.lora_targets.split(",")) if args.lora_targets else None,
         lora_lr=args.lora_lr,
         head_lr=args.head_lr,
         batch_size=args.batch_size,

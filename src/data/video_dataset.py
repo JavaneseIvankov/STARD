@@ -29,7 +29,7 @@ augmentation is only enabled for the train split.
 
 On-disk clip layout
 -------------------
-    data/clips/<split>/<video_id>.pt   ->  {"frames": (16, 3, H, W) float32 [0,1],
+    data/clips/<split>/<video_id>.pt   ->  {"frames": (16, 3, H, W) uint8 [0,255],
                                             "clip_start_sec": float,
                                             "preprocessing_version": str}
 
@@ -137,7 +137,11 @@ class ClipDataset(Dataset):
             raise ValueError(
                 f"ClipDataset[{row.video_id}]: expected 16 cached frames, got {frames.shape[0]}"
             )
-        frames = frames.float().clamp(0.0, 1.0)
+        if frames.dtype == torch.uint8:
+            frames = frames.float().div_(255.0)
+        else:
+            frames = frames.float()
+        frames = frames.clamp(0.0, 1.0)
 
         item: dict[str, object] = {
             "video_id": row.video_id,

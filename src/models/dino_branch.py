@@ -1,8 +1,8 @@
 """STAF-Net | src/models/dino_branch.py
 
 Owner   : Person 1 (Spatial branch)
-Status  : IMPLEMENTED - shape/behaviour verified on CPU with a randomly
-          initialised backbone. Real weights need gated HF access (see below).
+Status  : IMPLEMENTED - dual loader (transformers + timm), verified on CPU with a
+          synthetic checkpoint in the exact on-server format.
 
 Responsibility
 --------------
@@ -17,27 +17,39 @@ Contract
 - Output : src.contracts.BranchFeatures(z=(B, 384), branch="dino")
 - Pooling: mean over the 4 frame CLS embeddings (plan 5.1, decision D5)
 
-Pooling note (D5)
------------------
-DINOv3 ViT-S/16 in transformers returns `pooler_output` = CLS token after
-layernorm, with `num_register_tokens = 0`. We mean-pool the CLS token across the
-four frames (not patch tokens) so z_D stays an image-level descriptor and the
-vector is invariant to patch-count changes.
+Two checkpoint layouts, auto-detected from config.json
+------------------------------------------------------
+1. transformers (`model_type: dinov3_vit`, `architectures: [DINOv3ViTModel]`)
+     attention projections: q_proj / k_proj / v_proj / o_proj
+     pooled CLS: out.pooler_output
+     LoRA targets: q_proj, v_proj
+
+2. timm (`architecture: vit_small_patch16_dinov3`, `pretrained_cfg`, tag lvd1689m)
+     attention: ONE fused `qkv` Linear(1152, 384) plus `proj`
+     prefix tokens: 1 CLS + 4 registers -> forward_features (B, 201, 384)
+     pooled CLS: forward_features(x)[:, 0]
+     LoRA targets: qkv
+
+This is the practical resolution of decision D6: the LoRA target set depends on
+the loader, so it is chosen from the detected backend instead of hardcoded. A
+mismatched target list raises immediately instead of silently training nothing.
 
 Access note
 -----------
-facebook/dinov3-vits16-pretrain-lvd1689m is a GATED repo (`gated: manual`).
-Request access on the model page, then run `hf auth login`. Without access,
-`pretrained=False` builds the same architecture with random weights, which is
-enough for shape tests but produces meaningless metrics.
+facebook/dinov3-vits16-pretrain-lvd1689m is a gated HF repo. Pointing
+`pretrained_name` at a local directory that contains config.json +
+model.safetensors bypasses the hub entirely and needs no login.
 
 Hyperparameters (plan 5.2)
 --------------------------
-LoRA r=8, alpha=16, dropout=0.05 on q_proj/v_proj; lr 1e-4 LoRA / 5e-4 head;
-AdamW wd 0.01; BF16; microbatch 4-8; 1-2 epochs; BCEWithLogitsLoss.
+LoRA r=8, alpha=16, dropout=0.05; lr 1e-4 LoRA / 5e-4 head; AdamW wd 0.01;
+BF16; microbatch 4-8; 1-2 epochs; BCEWithLogitsLoss.
 """
 
 from __future__ import annotations
+
+import json
+from pathlib import Path
 
 import torch
 import torch.nn as nn
@@ -46,7 +58,14 @@ from torchvision.transforms import Normalize
 from src.contracts import DINO_DIM, DINO_FRAMES, DINO_SIZE, BranchFeatures
 from src.utils.lora import LoRAReport, attach_lora, count_trainable, freeze_module
 
-__all__ = ["DinoBranch", "DEFAULT_CHECKPOINT", "IMAGENET_MEAN", "IMAGENET_STD"]
+__all__ = [
+    "DinoBranch",
+    "DEFAULT_CHECKPOINT",
+    "IMAGENET_MEAN",
+    "IMAGENET_STD",
+    "detect_backend",
+    "LORA_TARGETS",
+]
 
 DEFAULT_CHECKPOINT = "facebook/dinov3-vits16-pretrain-lvd1689m"
 
@@ -54,48 +73,80 @@ DEFAULT_CHECKPOINT = "facebook/dinov3-vits16-pretrain-lvd1689m"
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
 
+# LoRA target modules per loader (decision D6).
+LORA_TARGETS: dict[str, tuple[str, ...]] = {
+    "transformers": ("q_proj", "v_proj"),
+    "timm": ("qkv",),
+}
+
+
+def detect_backend(checkpoint: str | Path) -> str:
+    """Return 'transformers' or 'timm' by inspecting a local checkpoint dir.
+
+    Raises FileNotFoundError when the directory has no config.json, so a typo in
+the weights path fails loudly instead of silently falling back to the hub.
+    """
+    path = Path(checkpoint)
+    config_path = path / "config.json"
+    if not config_path.exists():
+        raise FileNotFoundError(
+            f"detect_backend: {config_path} not found. Pass the local weights directory "
+            f"(config.json + model.safetensors) or an HF repo id."
+        )
+    cfg = json.loads(config_path.read_text(encoding="utf-8"))
+
+    model_type = str(cfg.get("model_type", ""))
+    architectures = " ".join(str(a) for a in cfg.get("architectures", []))
+    if model_type.startswith("dinov3") or "DINOv3" in architectures:
+        return "transformers"
+    if "architecture" in cfg or "pretrained_cfg" in cfg:
+        return "timm"
+    raise ValueError(
+        f"detect_backend: cannot classify {config_path}. Keys: {sorted(cfg)[:10]}"
+    )
+
 
 class DinoBranch(nn.Module):
-    """DINOv3 ViT-S/16 clip encoder -> (B, 384) real/fake logit.
+    """DINOv3 ViT-S/16 clip encoder -> (B, 384) embedding plus a real/fake head.
 
     Parameters
     ----------
     pretrained_name:
-        HF repo id or local directory holding the checkpoint.
+        Local weights directory or HF repo id. A local dir avoids the gated hub.
     pretrained:
-        False builds the architecture with random weights (shape tests only).
+        False builds the architecture with random weights (pipeline smoke tests).
     use_lora:
         Wrap the backbone with LoRA adapters instead of training the head alone.
     lora_targets:
-        Projection suffixes to adapt. Verified names in transformers 5.x:
-        q_proj, k_proj, v_proj, o_proj.
+        Projection suffixes to adapt. None picks the loader-correct default from
+        LORA_TARGETS (q_proj/v_proj for transformers, qkv for timm).
     """
 
     def __init__(
         self,
-        pretrained_name: str | None = None,
+        pretrained_name: str | Path | None = None,
         *,
         pretrained: bool = True,
         use_lora: bool = False,
         lora_rank: int = 8,
         lora_alpha: int = 16,
         lora_dropout: float = 0.05,
-        lora_targets: tuple[str, ...] = ("q_proj", "v_proj"),
+        lora_targets: tuple[str, ...] | None = None,
         hidden_dim: int | None = None,
         dropout: float = 0.1,
     ) -> None:
         super().__init__()
-        from transformers import DINOv3ViTConfig, DINOv3ViTModel
+        checkpoint = str(pretrained_name or DEFAULT_CHECKPOINT)
 
-        checkpoint = pretrained_name or DEFAULT_CHECKPOINT
-        if pretrained:
-            backbone = DINOv3ViTModel.from_pretrained(checkpoint)
+        if Path(checkpoint).is_dir():
+            self.backend = detect_backend(checkpoint)
         else:
-            cfg = DINOv3ViTConfig(hidden_size=DINO_DIM, patch_size=16, image_size=DINO_SIZE)
-            backbone = DINOv3ViTModel(cfg)
+            self.backend = "transformers"
 
+        backbone = self._build_backbone(checkpoint, pretrained=pretrained)
         self.backbone = freeze_module(backbone)
-        self.encoder_dim = int(self.backbone.config.hidden_size)
+
+        self.encoder_dim = self._resolve_encoder_dim()
         if self.encoder_dim != DINO_DIM:
             raise ValueError(
                 f"DinoBranch: checkpoint hidden size {self.encoder_dim} does not match "
@@ -114,17 +165,75 @@ class DinoBranch(nn.Module):
 
         self.use_lora = False
         self.lora_report: LoRAReport | None = None
+        self.lora_targets: tuple[str, ...] = tuple(lora_targets or LORA_TARGETS[self.backend])
         if use_lora:
+            targets = self.lora_targets
             self.backbone, self.lora_report = attach_lora(
                 self.backbone,
                 rank=lora_rank,
                 alpha=lora_alpha,
                 dropout=lora_dropout,
-                target_modules=lora_targets,
+                target_modules=targets,
             )
             self.use_lora = True
 
-    # ------------------------------------------------------------------ core
+    # ---------------------------------------------------------------- loading
+    def _build_backbone(self, checkpoint: str, *, pretrained: bool) -> nn.Module:
+        if self.backend == "transformers":
+            from transformers import DINOv3ViTConfig, DINOv3ViTModel
+
+            if pretrained:
+                return DINOv3ViTModel.from_pretrained(checkpoint)
+            cfg = DINOv3ViTConfig(
+                hidden_size=DINO_DIM, patch_size=16, image_size=DINO_SIZE
+            )
+            return DINOv3ViTModel(cfg)
+
+        import timm
+        from safetensors.torch import load_file
+
+        path = Path(checkpoint)
+        cfg = json.loads((path / "config.json").read_text(encoding="utf-8"))
+        arch = cfg.get("architecture")
+        if not arch:
+            raise ValueError(f"DinoBranch: timm config in {path} has no 'architecture' key")
+
+        model = timm.create_model(
+            arch,
+            pretrained=False,
+            num_classes=0,
+            img_size=DINO_SIZE,
+            global_pool=cfg.get("global_pool", "avg"),
+        )
+        if not pretrained:
+            return model
+
+        weights = path / "model.safetensors"
+        if not weights.exists():
+            raise FileNotFoundError(
+                f"DinoBranch: {weights} not found. The timm layout needs "
+                f"config.json + model.safetensors in the same directory."
+            )
+        state = load_file(weights)
+        missing, unexpected = model.load_state_dict(state, strict=False)
+        missing = [k for k in missing if not k.startswith(("head.", "fc."))]
+        if missing or unexpected:
+            raise ValueError(
+                f"DinoBranch: checkpoint mismatch for {arch}: "
+                f"missing={missing[:5]} unexpected={unexpected[:5]}"
+            )
+        return model
+
+    def _resolve_encoder_dim(self) -> int:
+        if self.backend == "transformers":
+            return int(self.backbone.config.hidden_size)
+        for attr in ("num_features", "embed_dim"):
+            value = getattr(self.backbone, attr, None)
+            if value:
+                return int(value)
+        raise ValueError("DinoBranch: cannot determine timm backbone feature width")
+
+    # ------------------------------------------------------------------- core
     def encode(self, frames: torch.Tensor) -> BranchFeatures:
         """frames (B, 4, 3, 224, 224) -> BranchFeatures(z=(B, 384))."""
         if frames.ndim != 5:
@@ -138,17 +247,33 @@ class DinoBranch(nn.Module):
 
         flat = frames.reshape(b * t, c, h, w)
         flat = self.normalize(flat)
-        out = self.backbone(pixel_values=flat)
-        cls = out.pooler_output  # (B*4, 384), CLS after layernorm
+        cls = self._forward_cls(flat)
 
         if cls.shape[-1] != self.encoder_dim:
             raise ValueError(
                 f"DinoBranch.encode: unexpected pooled width {cls.shape[-1]}, "
                 f"expected {self.encoder_dim}"
             )
-        z = cls.reshape(b, t, self.encoder_dim).mean(dim=1)
-        z = z.to(torch.float32)
+        z = cls.reshape(b, t, self.encoder_dim).mean(dim=1).to(torch.float32)
         return BranchFeatures(z=z, branch="dino")
+
+    def _forward_cls(self, flat: torch.Tensor) -> torch.Tensor:
+        """Return the pooled CLS embedding for a batch of single frames."""
+        if self.backend == "transformers":
+            out = self.backbone(pixel_values=flat)
+            return out.pooler_output
+
+        feats = self.backbone.forward_features(flat)
+        if isinstance(feats, dict):
+            for key in ("x_norm_clstoken", "x_clstoken", "pre_logits"):
+                if key in feats:
+                    return feats[key]
+            feats = feats.get("x_norm_patchtokens")
+            if feats is None:
+                raise ValueError(f"DinoBranch: unexpected timm feature keys {list(feats)}")
+            return feats.mean(dim=1)
+        # (B, 1 CLS + 4 registers + 196 patches, 384) -> CLS
+        return feats[:, 0]
 
     def forward(self, frames: torch.Tensor) -> BranchFeatures:
         """Embedding forward used by the smoke test and feature extraction."""
@@ -159,7 +284,7 @@ class DinoBranch(nn.Module):
         z = self.encode(frames).z
         return self.head(z)
 
-    # -------------------------------------------------------------- training
+    # --------------------------------------------------------------- training
     def trainable_parameters(self) -> list[nn.Parameter]:
         """Adapter parameters (when LoRA) plus head parameters."""
         return [p for p in self.parameters() if p.requires_grad]
@@ -180,6 +305,6 @@ class DinoBranch(nn.Module):
         mode = "lora" if self.use_lora else "frozen"
         extra = f" | {self.lora_report.summary()}" if self.lora_report else ""
         return (
-            f"DinoBranch[{mode}] dim={self.encoder_dim} "
+            f"DinoBranch[{mode}/{self.backend}] dim={self.encoder_dim} "
             f"trainable={trainable:,}/{total:,} ({100 * ratio:.2f}%){extra}"
         )

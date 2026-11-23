@@ -19,7 +19,8 @@ Output
 ------
 data/clips/<split>/<video_id>.pt
     {
-      "frames": FloatTensor (16, 3, H, W) in [0, 1],
+      "frames": UInt8Tensor (16, 3, H, W) in [0, 255]  (7 MB/clip, not 28),
+                -> cast to float [0,1] by src/data/video_dataset.py
       "clip_start_sec": float,
       "preprocessing_version": "clips-v1",
       "face_box": (4,) int tensor of the median tracked box,
@@ -182,8 +183,12 @@ def crop_face_window(frames: list, boxes: list[tuple[int, int, int, int]], cfg: 
         resized = cv2.resize(crop, (cfg.output_size, cfg.output_size), interpolation=cv2.INTER_AREA)
         out.append(cv2.cvtColor(resized, cv2.COLOR_BGR2RGB))
 
-    tensor = torch.from_numpy(np.stack(out)).permute(0, 3, 1, 2).float() / 255.0
-    return tensor.clamp(0.0, 1.0), median
+    # Stored as uint8: 7 MB per clip instead of 28 MB float32. The dataset casts
+    # to float and divides by 255, so nothing downstream sees the difference.
+    tensor = torch.from_numpy(np.stack(out)).permute(0, 3, 1, 2).contiguous()
+    if tensor.dtype != torch.uint8:
+        raise ValueError(f"crop_face_window: expected uint8 frames, got {tensor.dtype}")
+    return tensor, median
 
 
 def _build_detector(cfg: FaceTrackConfig):
