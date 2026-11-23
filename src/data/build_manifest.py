@@ -122,6 +122,7 @@ def load_metadata_any(path: str | Path | None) -> dict[str, dict[str, object]]:
                 "label": _normalise_label(raw_label) if raw_label is not None else None,
                 "original": (Path(str(info["original"])).name if info.get("original") else None),
                 "relpath": str(info.get("filepath") or info.get("path") or "") or None,
+                "source_part": str(info.get("source_part") or "") or None,
             }
         return out
 
@@ -134,6 +135,7 @@ def load_metadata_any(path: str | Path | None) -> dict[str, dict[str, object]]:
                 "label": _normalise_label(raw_label) if raw_label is not None else None,
                 "original": Path(str(original)).name if original else None,
                 "relpath": str(record.get("filepath") or record.get("path") or "") or None,
+                "source_part": str(record.get("source_part") or "") or None,
             }
         return out
 
@@ -352,7 +354,35 @@ def build_manifest_from_dirs(
     splits = assign_splits(metadata, targets=targets, seed=seed, strict=strict)
     rows = _rows_from_assignment(metadata, splits, paths)
     print(describe_summary(summarize(rows)))
+    _report_source_parts(meta, rows)
     return rows
+
+
+def _report_source_parts(
+    meta: dict[str, dict[str, object]], rows: list[ManifestRow]
+) -> None:
+    """Report archive coverage per split (plan 2.3: multiple recording conditions)."""
+    parts = {row.video_id: str(meta.get(row.video_id, {}).get("source_part") or "") for row in rows}
+    if not any(parts.values()):
+        return
+
+    per_split: dict[str, Counter] = defaultdict(Counter)
+    for row in rows:
+        if parts[row.video_id]:
+            per_split[row.split][parts[row.video_id]] += 1
+
+    print("source archive coverage:")
+    for split in SPLITS:
+        counter = per_split.get(split)
+        if not counter:
+            continue
+        listing = ", ".join(f"{part}={count}" for part, count in sorted(counter.items()))
+        print(f"  {split:5s} parts={len(counter)}  {listing}")
+        if len(counter) < 2:
+            print(
+                f"  [warn] {split} draws from a single archive part - distribution shift "
+                "between splits is not represented; report this limitation"
+            )
 
 
 def build_manifest(
