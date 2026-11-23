@@ -1,11 +1,28 @@
-# STAF-Net | configs/vjepa_lora.yaml
-# Status: PLACEHOLDER - Person 2 supervised LoRA run (plan 6.2).
-#
-# checkpoint : V-JEPA 2.1 ViT-B/16, 384 resolution
-# input      : 16 frames x 384x384, layout (B, 3, 16, 384, 384)
-# tubelet    : model-defined (config reports 2 -> T_out 8, verify pooling)
-# lora       : r=8, alpha=16, dropout=0.05, targets = attention projections
-# optim      : AdamW, lr 5e-5..1e-4 (LoRA) / 5e-4 (head), weight_decay 0.01
-# runtime    : BF16, microbatch 1-2, grad accumulation 8-16, activation checkpointing
-# loss       : BCEWithLogitsLoss, select on validation AUROC
-# outputs    : checkpoints/vjepa_{frozen,lora}.pt + features/vjepa_{frozen,lora}
+# STAF-Net | configs/vjepa_lora.yaml (Person 2, plan §6.2)
+seed: 42
+manifest: "data/manifests/manifest.csv"
+clips_dir: "data/clips"
+weights: "~/weights/vjepa2.1-vitb16/hf"
+
+lora:
+  rank: 8
+  alpha: 16
+  dropout: 0.05
+  targets: null   # auto-detected from VJepaBranch attention projections
+
+train:
+  epochs: 2
+  batch_size: 2
+  grad_accum: 8
+  lora_lr: 5.0e-5
+  head_lr: 5.0e-4
+  weight_decay: 0.01
+  amp_dtype: "bf16"
+  gradient_checkpointing: true
+  num_workers: 4
+  patience: 2
+
+output:
+  checkpoints_dir: "checkpoints"
+  features_dir: "data/features"
+  metrics_dir: "results/metrics"

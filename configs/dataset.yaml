@@ -1,11 +1,23 @@
 # STAF-Net | configs/dataset.yaml
-# Status: PLACEHOLDER - DFDC subset manifest + preprocessing parameters.
-#
-# Planned keys:
-#   dataset:    name (dfdc), raw_dir, manifest_csv, clips_dir, features_dir
-#   subset:     target_total 1500, train/val/test counts, balance_real_fake
-#   split:      unit: source_group, seed
-#   sampling:   clip_window_sec ~2.0, num_frames 16, dino_frame_indices [0,5,10,15]
-#   face:       detector (retinaface), tracker (iou/landmark), margin 0.20, output_size
-#   decode:     ffmpeg/opencv, failure_log
-#   cache:      clip_cache_dir (local SSD), deterministic val/test sampling
+seed: 42
+preprocessing_version: "clips-v1"
+
+dataset:
+  name: "dfdc"
+  raw_dir: "data/raw"
+  manifest_csv: "data/manifests/manifest.csv"
+  clips_dir: "data/clips"
+  features_dir: "data/features"
+
+subset:
+  target_total: 1500
+  train: { real: 525, fake: 525 }
+  val:   { real: 112, fake: 112 }
+  test:  { real: 113, fake: 113 }
+
+sampling:
+  clip_window_sec: 2.0
+  num_frames: 16
+  dino_frame_indices: [0, 5, 10, 15]
+  face_margin: 0.20
+  output_size: 384

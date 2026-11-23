@@ -1,6 +1,5 @@
-"""STAF-Net | src/models package.
+"""STAF-Net | src/models package."""
 
-Modules: dino_branch.py (Person 1), vjepa_branch.py (Person 2), stafnet.py (Person 3)
-"""
+from src.models.stafnet import FUSION_MODES, STAFNet
 
-# PLACEHOLDER: no exports yet.
+__all__ = ["STAFNet", "FUSION_MODES"]
