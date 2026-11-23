@@ -274,11 +274,11 @@
         <canvas id="camCanvas" class="cam-stage" width="640" height="480"></canvas>
 
         <div style="font-size:0.78rem; font-weight:600; color:var(--muted); margin-top:10px;">
-          Live Face Filter (recorded directly into test clip):
+          Live Mode (real camera vs. real neural AI deepfake on RTX 3060):
         </div>
         <div class="filter-row">
           <button class="filter-btn active" id="flt-none" onclick="setFilter('none')">No Filter (Real)</button>
-          <button class="filter-btn" id="flt-swap" onclick="setFilter('swap')">Face Swap Mask</button>
+          <button class="filter-btn" id="flt-swap" onclick="setFilter('swap')">AI Deepfake (InSwapper)</button>
           <button class="filter-btn" id="flt-warp" onclick="setFilter('warp')">Extreme Face Warp</button>
           <button class="filter-btn" id="flt-beauty" onclick="setFilter('beauty')">Deepfake Glitch</button>
         </div>
@@ -288,7 +288,7 @@
           <button class="btn btn-primary" id="btnRecCam" onclick="recordAndDetect()" disabled>Record 2.5s & Detect</button>
         </div>
         <p style="font-size:0.78rem; color:var(--muted); margin:10px 0 0;">
-          Align your face in the center oval. Try <strong>No Filter</strong> first, then switch to <strong>Face Swap Mask</strong> or <strong>Face Warp</strong> to see STRAD catch live facial manipulation!
+          <strong>AI Deepfake (InSwapper)</strong> runs a real neural face-swap model (<code>inswapper_128.onnx</code>) on all 16 frames of your webcam clip on the RTX 3060, then feeds the freshly deepfaked face into STRAD!
         </p>
       </div>
 
@@ -505,39 +505,9 @@
 
         const now = performance.now();
 
-        if (activeFilter === "swap" && swapImg.complete && swapImg.naturalWidth > 0) {
-          // Bold, unmistakable synthetic face-swap overlay with visible seam + flicker
-          const jx = Math.sin(now * 0.025) * 6.0;
-          const jy = Math.cos(now * 0.031) * 4.5;
-          const mw = 310, mh = 365;
-          const cx = W / 2 + jx, cy = H / 2 - 10 + jy;
-
-          maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
-          maskCtx.save();
-          maskCtx.beginPath();
-          maskCtx.ellipse(maskCanvas.width / 2, maskCanvas.height / 2, 112, 138, 0, 0, Math.PI * 2);
-          maskCtx.closePath();
-          maskCtx.clip();
-          const flick = 1.0 + Math.sin(now * 0.04) * 0.14;
-          maskCtx.filter = `contrast(1.18) saturate(1.25) brightness(${flick.toFixed(2)})`;
-          maskCtx.drawImage(swapImg, 0, 0, maskCanvas.width, maskCanvas.height);
-          maskCtx.restore();
-
-          // Hard-ish edge so the synthetic face swap is immediately obvious
-          maskCtx.save();
-          maskCtx.globalCompositeOperation = "destination-in";
-          const grad = maskCtx.createRadialGradient(
-            maskCanvas.width / 2, maskCanvas.height / 2, 78,
-            maskCanvas.width / 2, maskCanvas.height / 2, 136
-          );
-          grad.addColorStop(0, "rgba(0,0,0,1)");
-          grad.addColorStop(0.82, "rgba(0,0,0,0.97)");
-          grad.addColorStop(1, "rgba(0,0,0,0)");
-          maskCtx.fillStyle = grad;
-          maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
-          maskCtx.restore();
-
-          ctx.drawImage(maskCanvas, cx - mw / 2, cy - mh / 2, mw, mh);
+        if (activeFilter === "swap") {
+          // Keep raw face clean for InSwapper-128 on backend; show subtle HUD badge only on preview
+          // (no overlay drawn on face so InsightFace detects your real landmarks cleanly!)
         } else if (activeFilter === "warp") {
           // Dramatic, unmistakable funhouse bulge + swirl face distortion
           scratchCtx.clearRect(0, 0, W, H);
@@ -618,7 +588,8 @@
 
     async function recordAndDetect() {
       if (!camStream) return;
-      const filterNames = { none: "No Filter", swap: "Face Swap Mask", warp: "Extreme Face Warp", beauty: "Deepfake Glitch" };
+      const filterNames = { none: "No Filter", swap: "AI Deepfake (InSwapper-128)", warp: "Extreme Face Warp", beauty: "Deepfake Glitch" };
+      const useNeuralSwap = (activeFilter === "swap");
       setBusy(true, `Recording 2.5s (${filterNames[activeFilter]})...`);
 
       const canvas = document.getElementById("camCanvas");
@@ -628,17 +599,21 @@
       const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 2500000 });
       rec.ondataavailable = e => { if (e.data && e.data.size > 0) chunks.push(e.data); };
       rec.onstop = async () => {
-        setBusy(true, "Uploading clip & running STRAD (Std-Concat) on RTX 3060...");
+        setBusy(true, useNeuralSwap
+          ? "Running InSwapper-128 Neural Deepfake + STRAD Detection on RTX 3060..."
+          : "Uploading clip & running STRAD (Std-Concat) on RTX 3060...");
         try {
           const blob = new Blob(chunks, { type: mime });
           const fd = new FormData();
           fd.append("video", blob, `camera_${activeFilter}.webm`);
+          fd.append("neural_swap", useNeuralSwap ? "1" : "0");
           const res = await fetch("/api/predict", { method: "POST", body: fd });
           if (!res.ok) throw new Error((await res.json()).detail || "Inference failed");
           const data = await res.json();
-          data.source = `Live Camera (${filterNames[activeFilter]})`;
+          if (!useNeuralSwap) data.source = `Live Camera (${filterNames[activeFilter]})`;
           renderResult(data);
-          setBusy(false, `Live camera (${filterNames[activeFilter]}) analyzed in ${data.inference_ms} ms on ${data.gpu}.`);
+          const swapNote = data.swap_ms > 0 ? ` (InSwapper: ${data.swap_ms} ms)` : "";
+          setBusy(false, `Analyzed in ${data.inference_ms} ms${swapNote} on ${data.gpu}.`);
         } catch (err) {
           setBusy(false, "Error: " + err.message);
         }

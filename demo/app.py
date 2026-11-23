@@ -44,6 +44,8 @@ STOCK_DIR = Path(os.environ.get("STAFNET_STOCK_DIR", str(DEMO_DIR / "stock_video
 WEIGHTS_DIR = Path(os.environ.get("STAFNET_WEIGHTS_DIR", str(ROOT / "weights")))
 ADAPTERS_DIR = Path(os.environ.get("STAFNET_ADAPTERS_DIR", str(DEMO_DIR / "adapters")))
 BUNDLE_PATH = Path(os.environ.get("STAFNET_BUNDLE_PATH", str(DEMO_DIR / "fusion_bundle.pt")))
+SWAPPER_PATH = WEIGHTS_DIR / "swapper" / "inswapper_128.onnx"
+SOURCE_FACE_PATH = STATIC_DIR / "swap_face.png"
 
 STOCK_CATALOG = [
     {
@@ -140,12 +142,36 @@ def _load_engine() -> dict[str, object]:
     bundle = torch.load(BUNDLE_PATH, map_location="cpu", weights_only=False)
     cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
+    # Optional real neural deepfake generator (InsightFace buffalo_l + InSwapper-128)
+    face_analyzer = None
+    swapper_model = None
+    source_face = None
+    if SWAPPER_PATH.exists() and SOURCE_FACE_PATH.exists():
+        try:
+            import insightface
+            from insightface.app import FaceAnalysis
+
+            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if device.type == "cuda" else ["CPUExecutionProvider"]
+            face_analyzer = FaceAnalysis(name="buffalo_l", providers=providers)
+            face_analyzer.prepare(ctx_id=0 if device.type == "cuda" else -1, det_size=(320, 320))
+            swapper_model = insightface.model_zoo.get_model(str(SWAPPER_PATH), providers=providers)
+            src_bgr = cv2.imread(str(SOURCE_FACE_PATH))
+            src_faces = face_analyzer.get(src_bgr)
+            if src_faces:
+                source_face = max(src_faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
+                print("[STRAD Demo] Neural face swapper (InSwapper-128) loaded on GPU.", flush=True)
+        except Exception as exc:
+            print(f"[STRAD Demo] Neural swapper unavailable: {exc}", flush=True)
+
     _ENGINE.update({
         "device": device,
         "dino": dino,
         "vjepa": vjepa,
         "bundle": bundle,
         "cascade": cascade,
+        "face_analyzer": face_analyzer,
+        "swapper": swapper_model,
+        "source_face": source_face,
         "gpu_name": torch.cuda.get_device_name(0) if device.type == "cuda" else "CPU",
     })
     print(f"[STAF-Net Demo] Ready in {time.perf_counter() - t0:.1f}s on {_ENGINE['gpu_name']}.", flush=True)
@@ -391,10 +417,35 @@ def get_stock_video(filename: str) -> FileResponse:
     return FileResponse(str(path), media_type="video/mp4")
 
 
+def _apply_neural_face_swap(crops_rgb: np.ndarray, eng: dict[str, object]) -> tuple[np.ndarray, int, float]:
+    """Run real InsightFace InSwapper-128 across all 16 RGB frames on GPU/CPU."""
+    analyzer = eng.get("face_analyzer")
+    swapper = eng.get("swapper")
+    src_face = eng.get("source_face")
+    if analyzer is None or swapper is None or src_face is None:
+        raise HTTPException(status_code=503, detail="Neural face swapper (InSwapper-128) is not loaded.")
+
+    t0 = time.perf_counter()
+    swapped_rgb = []
+    swapped_count = 0
+    for fr_rgb in crops_rgb:
+        fr_bgr = cv2.cvtColor(fr_rgb, cv2.COLOR_RGB2BGR)
+        faces = analyzer.get(fr_bgr)
+        if faces:
+            tgt = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
+            out_bgr = swapper.get(fr_bgr, tgt, src_face, paste_back=True)
+            swapped_rgb.append(cv2.cvtColor(out_bgr, cv2.COLOR_BGR2RGB))
+            swapped_count += 1
+        else:
+            swapped_rgb.append(fr_rgb)
+    return np.stack(swapped_rgb, axis=0), swapped_count, round((time.perf_counter() - t0) * 1000.0, 1)
+
+
 @app.post("/api/predict")
 async def predict(
     stock_id: str | None = Form(default=None),
     video: UploadFile | None = File(default=None),
+    neural_swap: str = Form(default="0"),
 ) -> JSONResponse:
     if not stock_id and video is None:
         raise HTTPException(status_code=400, detail="Provide either stock_id or a video upload.")
@@ -424,10 +475,17 @@ async def predict(
             source_label = "Live Camera Capture" if "camera" in (video.filename or "").lower() else (video.filename or "Uploaded Video")
 
         crops_rgb, face_detected = _decode_and_crop_16_frames(vid_path, eng["cascade"])
+        swap_ms = 0.0
+        swapped_frames = 0
         with _LOCK:
+            if neural_swap == "1":
+                crops_rgb, swapped_frames, swap_ms = _apply_neural_face_swap(crops_rgb, eng)
+                source_label = f"{source_label} + InSwapper-128 AI Deepfake ({swapped_frames}/16f)"
             result = _run_inference(crops_rgb)
 
         result["source"] = source_label
         result["face_detected"] = face_detected
         result["ground_truth"] = gt
+        result["swap_ms"] = swap_ms
+        result["swapped_frames"] = swapped_frames
         return JSONResponse(result)
