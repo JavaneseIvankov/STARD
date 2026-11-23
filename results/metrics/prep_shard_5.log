@@ -1,0 +1,3 @@
+[info] shard 5/8: 189 videos
+clips written=162 skipped=0 failed=27 rate=0.1429
+report: data/manifests/preprocess_report_shard5of8.json

@@ -1,0 +1,82 @@
+[
+  {
+    "experiment": "A1",
+    "label": "A1 Frozen DINO",
+    "auroc": 0.8377193212509155,
+    "f1": 0.7674418604651163,
+    "accuracy": 0.7402597665786743,
+    "eer": 0.20782725512981415,
+    "threshold": 0.2495318502187729,
+    "train_seconds": 48.09
+  },
+  {
+    "experiment": "A2",
+    "label": "A2 Frozen V-JEPA",
+    "auroc": 0.8775303363800049,
+    "f1": 0.7883211678832116,
+    "accuracy": 0.8116883039474487,
+    "eer": 0.19483807682991028,
+    "threshold": 0.33174964785575867,
+    "train_seconds": 43.0
+  },
+  {
+    "experiment": "A3",
+    "label": "A3 DINO LoRA",
+    "auroc": 0.8534075021743774,
+    "f1": 0.8024691358024691,
+    "accuracy": 0.7922077775001526,
+    "eer": 0.20782725512981415,
+    "threshold": 0.15319494903087616,
+    "train_seconds": 41.42
+  },
+  {
+    "experiment": "A4",
+    "label": "A4 V-JEPA LoRA",
+    "auroc": 0.8854589462280273,
+    "f1": 0.8461538461538461,
+    "accuracy": 0.8441558480262756,
+    "eer": 0.1558704376220703,
+    "threshold": 0.17841067910194397,
+    "train_seconds": 43.09
+  },
+  {
+    "experiment": "A5",
+    "label": "A5 Frozen concat",
+    "auroc": 0.8640351295471191,
+    "f1": 0.8148148148148148,
+    "accuracy": 0.8051947951316833,
+    "eer": 0.19483807682991028,
+    "threshold": 0.04266452044248581,
+    "train_seconds": 83.39
+  },
+  {
+    "experiment": "A6",
+    "label": "A6 Frozen gated",
+    "auroc": 0.870276689529419,
+    "f1": 0.7870967741935484,
+    "accuracy": 0.7857142686843872,
+    "eer": 0.20782725512981415,
+    "threshold": 0.3401102125644684,
+    "train_seconds": 84.32
+  },
+  {
+    "experiment": "A7",
+    "label": "A7 Adapted concat",
+    "auroc": 0.8692644834518433,
+    "f1": 0.8292682926829267,
+    "accuracy": 0.8181818127632141,
+    "eer": 0.19483807682991028,
+    "threshold": 0.05941883102059364,
+    "train_seconds": 83.19
+  },
+  {
+    "experiment": "A8",
+    "label": "A8 STAF-Net (LoRA gated)",
+    "auroc": 0.868083655834198,
+    "f1": 0.8098159509202454,
+    "accuracy": 0.798701286315918,
+    "eer": 0.19483807682991028,
+    "threshold": 0.19820867478847504,
+    "train_seconds": 83.32
+  }
+]

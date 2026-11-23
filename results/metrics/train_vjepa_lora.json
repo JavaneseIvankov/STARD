@@ -1,0 +1,27 @@
+{
+  "branch": "vjepa",
+  "mode": "lora",
+  "checkpoint": "checkpoints/vjepa_lora.pt",
+  "best_epoch": 2,
+  "best_val_auroc": 0.7841026186943054,
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.658664227530943,
+      "val_auroc": 0.7403419017791748,
+      "val_f1": 0.6493506493506493,
+      "val_accuracy": 0.6470588445663452,
+      "seconds": 100.6
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.6032119105315076,
+      "val_auroc": 0.7841026186943054,
+      "val_f1": 0.6993006993006994,
+      "val_accuracy": 0.7189542651176453,
+      "seconds": 94.9
+    }
+  ],
+  "device": "cuda",
+  "peak_vram_gb": 5.76
+}

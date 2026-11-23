@@ -1,0 +1,14 @@
+{
+  "format_version": "0.2",
+  "variant": "vjepa_frozen",
+  "backbone": "vjepa2.1-vitb16",
+  "checkpoint_id": "vjepa+vjepa_frozen",
+  "preprocessing_version": "clips-v1",
+  "num_frames": 16,
+  "resolution": 384,
+  "pooling": "mean",
+  "dim": 768,
+  "num_records": 1023,
+  "created_at": "2026-11-23T03:58:07.465045+00:00",
+  "git_commit": "unknown"
+}

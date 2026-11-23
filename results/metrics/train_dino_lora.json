@@ -1,0 +1,27 @@
+{
+  "branch": "dino",
+  "mode": "lora",
+  "checkpoint": "checkpoints/dino_lora.pt",
+  "best_epoch": 2,
+  "best_val_auroc": 0.8249572515487671,
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.6313606215847863,
+      "val_auroc": 0.7876922488212585,
+      "val_f1": 0.7272727272727272,
+      "val_accuracy": 0.7058823704719543,
+      "seconds": 54.8
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.5278415964709388,
+      "val_auroc": 0.8249572515487671,
+      "val_f1": 0.7299270072992701,
+      "val_accuracy": 0.758169949054718,
+      "seconds": 31.8
+    }
+  ],
+  "device": "cuda",
+  "peak_vram_gb": 1.04
+}

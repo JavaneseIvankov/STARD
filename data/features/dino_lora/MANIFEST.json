@@ -1,0 +1,14 @@
+{
+  "format_version": "0.2",
+  "variant": "dino_lora",
+  "backbone": "dinov3-vits16",
+  "checkpoint_id": "dino+dino_lora@dino_lora.pt",
+  "preprocessing_version": "clips-v1",
+  "num_frames": 4,
+  "resolution": 224,
+  "pooling": "mean",
+  "dim": 384,
+  "num_records": 1023,
+  "created_at": "2026-11-23T04:01:54.169248+00:00",
+  "git_commit": "unknown"
+}
