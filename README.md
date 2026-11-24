@@ -1,6 +1,6 @@
 <div align="center">
 
-# STRAD / STAF-Net: Spatial–Temporal Attention and Standardized Dual-Branch Fusion for Video Deepfake Detection
+# STARD / STAF-Net: Spatial–Temporal Attention and Standardized Dual-Branch Fusion for Video Deepfake Detection
 
 **A Reproducible Comparative Study of V-JEPA 2.1, DINOv3, and Standardized Dual-Branch Feature Fusion on DFDC**
 
@@ -11,9 +11,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-4A5568)](LICENSE)
 
 *Pengolahan Citra Digital dan Visi Komputer (CIF61339) · Universitas Brawijaya*
+
+**Tim:** Priyambodo Arundaya Satmika (245150201111011), Alif Negifta Wibawaputra (245150200111066), dan Muhammad Faris El Hakim (245150207111019).
 *Trained on 1 × NVIDIA A100-SXM4-80GB · Live Demo Deployed on NVIDIA GeForce RTX 3060 12 GB*
 
-[Abstract](#abstract) · [Method](#2-method--architecture) · [Ablation Study](#4-main-results--ablation-study) · [Attention Maps](#5-attention-map-interpretability--gate-diagnosis) · [Live Demo](#6-live-inference-demo) · [Technical Report Notebook](notebooks/STAF_Net_Technical_Report.ipynb) · [Citation](#citation)
+[Abstract](#abstract) · [Method](#2-method--architecture) · [Ablation Study](#4-main-results--ablation-study) · [Attention Maps](#5-attention-map-interpretability--gate-diagnosis) · [Live Demo](#6-live-inference-demo) · [Technical Report Notebook](notebooks/STARD_Technical_Report.ipynb) · [Citation](#citation)
 
 </div>
 
@@ -21,7 +23,7 @@
 
 ## Abstract
 
-Video deepfake detection requires capturing both **spatial facial manipulation artifacts** (blending seams, skin texture discontinuities, mask boundaries) and **spatiotemporal inconsistencies** (identity flicker, unnatural blink dynamics, motion drift). We present **STRAD / STAF-Net**, a reproducible dual-branch video deepfake detection study combining **V-JEPA 2.1 ViT-B/16** (16-frame spatiotemporal world model) and **DINOv3 ViT-S/16** (4-frame spatial self-supervised vision encoder) under strict **source-grouped splitting** on DFDC (`1,023` verified 16-frame face clips; `716` train / `153` val / `154` test; zero `source_group_id` overlap).
+Video deepfake detection requires capturing both **spatial facial manipulation artifacts** (blending seams, skin texture discontinuities, mask boundaries) and **spatiotemporal inconsistencies** (identity flicker, unnatural blink dynamics, motion drift). We present **STARD / STAF-Net**, a reproducible dual-branch video deepfake detection study combining **V-JEPA 2.1 ViT-B/16** (16-frame spatiotemporal world model) and **DINOv3 ViT-S/16** (4-frame spatial self-supervised vision encoder) under strict **source-grouped splitting** on DFDC (`1,023` verified 16-frame face clips; `716` train / `153` val / `154` test; zero `source_group_id` overlap).
 
 Our controlled ablation study (`A1–A8` + 10-seed sweep + real post-RoPE last-block ViT attention maps) uncovers three core findings:
 
@@ -30,7 +32,7 @@ Our controlled ablation study (`A1–A8` + 10-seed sweep + real post-RoPE last-b
 3. **Standardized Dual-Branch Fusion (`Std-Concat`) unlocks `+0.030` AUROC:** Despite both backbones being ViTs, their test predictions correlate only at **`r = 0.7509`** and their last-block spatial attention maps correlate at only **`r = +0.1818`**. Applying train-split feature-wise z-score standardization + L2-regularized concatenation (**`Std-Concat`**) boosts held-out test performance to **`0.9030` Test AUROC** (95% group-bootstrap CI `[0.850, 0.948]`) and wins **10/10 random seeds** in PyTorch (`0.8892 ± 0.0073` vs. `0.8571 ± 0.0103`).
 
 <div align="center">
-  <img src="assets/ablation_progression.gif" alt="STRAD / STAF-Net Ablation Progression GIF" width="88%" />
+  <img src="assets/ablation_progression.gif" alt="STARD / STAF-Net Ablation Progression GIF" width="88%" />
   <br />
   <sub><b>Figure 1.</b> Progressive held-out DFDC Test ROC-AUC ablation across Frozen baselines (<code>A1, A2</code>), Stage I LoRA (<code>A3, A4</code>), unnormalized MLP/gated fusion (<code>A5–A8</code>), and Standardized Dual-Branch Fusion (<code>Std-Blend 0.9027</code>, <code>Std-Concat 0.9030</code>).</sub>
 </div>
@@ -105,7 +107,7 @@ Primary metric: **video-level ROC-AUC** (threshold-independent). All F1/Accuracy
 | `Std-DINOv3` (`C=0.05`) | 2: Spatial (Std) | 0.8713 | `[0.812, 0.924]` | `0.8702 ± 0.0046` *(PyTorch)* | 0.8000 | 0.7987 | 0.1948 |
 | `Std-V-JEPA 2.1` (`C=0.05`) | 1: Temporal (Std) | 0.8733 | `[0.813, 0.930]` | `0.8571 ± 0.0103` *(PyTorch)* | 0.8235 | 0.8117 | 0.1818 |
 | `Std-Blend` (`0.5 DINO + 0.5 V-JEPA`) | 3: Std Fusion | 0.9027 | `[0.851, 0.949]` | Deterministic | 0.8280 | 0.8247 | 0.1688 |
-| **`Std-Concat` (STRAD Best)** | **3: Std Fusion** | **0.9030** | **`[0.850, 0.948]`** | **`0.8892 ± 0.0073` (10/10 wins)** | 0.8313 | 0.8182 | 0.1818 |
+| **`Std-Concat` (STARD Best)** | **3: Std Fusion** | **0.9030** | **`[0.850, 0.948]`** | **`0.8892 ± 0.0073` (10/10 wins)** | 0.8313 | 0.8182 | 0.1818 |
 
 <div align="center">
   <img src="results/plots/notebook_figs/ablation_10_roc_and_seeds.png" alt="Held-Out ROC Curves and 10-Seed Stability" width="92%" />
@@ -157,7 +159,7 @@ uvicorn demo.app:app --host 0.0.0.0 --port 8080
 ## 7. Reproducibility, Technical Report & Compute Cost
 
 All experiments, checkpoint replay parity checks (`8/8 PASS`), attention map ablations, and 10-seed sweeps are self-contained in the fully executed 76-cell technical report notebook:
-- **Full Technical Report:** [notebooks/STAF_Net_Technical_Report.ipynb](notebooks/STAF_Net_Technical_Report.ipynb) *(runs end-to-end on CPU directly from the verified cached features & checkpoints in this repo!)*
+- **Full Technical Report:** [notebooks/STARD_Technical_Report.ipynb](notebooks/STARD_Technical_Report.ipynb) *(runs end-to-end on CPU directly from the verified cached features & checkpoints in this repo!)*
 
 | Stage | Hardware | Peak VRAM | Wall Time | Artifact Size |
 | :--- | :--- | :---: | :---: | :---: |
@@ -166,6 +168,10 @@ All experiments, checkpoint replay parity checks (`8/8 PASS`), attention map abl
 | Offline Feature Cache (`1,023` clips × 4 variants) | 1 × A100 80 GB | 5.76 GB | 145.0 s | 11.7 MB |
 | Stage II — `A1–A8` MLP Sweep | 1 × A100 / CPU | 0.20 GB | 41–84 s/exp | 9.1 MB (`fusion_A1..A8.pt`) |
 | Stage II — **`Std-Concat` Fusion** | CPU | 0.00 GB | **0.05 s** | **28.6 KB** |
+
+### Running the notebook and reproducing experiments
+
+The main notebook replays analysis using the tracked manifest, cached features, Stage II checkpoints and metrics. Repeating preprocessing or backbone training additionally requires the DFDC source videos, pretrained backbone weights, and a suitable GPU. See `configs/dataset.yaml`, `configs/dino_lora.yaml`, and `configs/vjepa_lora.yaml` for paths. Notebook execution also needs Jupyter, nbconvert, scipy, seaborn and Pillow. Recomputed standardized-fusion thresholds and metrics may vary with library versions; compare them with the recorded run. Source-group separation does not guarantee actor-identity separation.
 
 ### Quickstart Commands
 
@@ -182,7 +188,7 @@ done
 python -m src.evaluate --config configs/fusion.yaml --all --split test
 
 # 3. Re-execute the complete 76-cell technical report notebook
-jupyter nbconvert --to notebook --execute --inplace notebooks/STAF_Net_Technical_Report.ipynb
+jupyter nbconvert --to notebook --execute --inplace notebooks/STARD_Technical_Report.ipynb
 ```
 
 ---
@@ -207,7 +213,7 @@ STARD/
 │   └── features/                    # Cached v0.2 embeddings (dino/vjepa × frozen/lora)
 ├── demo/                            # FastAPI RTX 3060 live webcam + InSwapper-128 demo
 ├── notebooks/
-│   └── STAF_Net_Technical_Report.ipynb  # Complete 17-section executed technical report
+│   └── STARD_Technical_Report.ipynb  # Complete 17-section executed technical report
 ├── results/
 │   ├── attention/                   # Real A100 post-RoPE attention maps (attention_maps.npz)
 │   ├── metrics/                     # A1-A8 logs, bootstrap CIs, 10-seed sweep
@@ -224,7 +230,7 @@ If you find this codebase, ablation protocol, or technical report useful, please
 
 ```bibtex
 @misc{stard_stafnet_2026,
-  title   = {STRAD / STAF-Net: Spatial-Temporal Attention and Standardized Dual-Branch Fusion for Video Deepfake Detection},
+  title   = {STARD / STAF-Net: Spatial-Temporal Attention and Standardized Dual-Branch Fusion for Video Deepfake Detection},
   author  = {STARD Research Team (CIF61339, Universitas Brawijaya)},
   year    = {2026},
   howpublished = {\url{https://github.com/JavaneseIvankov/STARD}}

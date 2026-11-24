@@ -1,4 +1,4 @@
-"""Build notebooks/STAF_Net_Technical_Report.ipynb following the exact 17-section
+"""Build notebooks/STARD_Technical_Report.ipynb following the exact 17-section
 structure of Tembok Ratapan Solo.ipynb, adapted 100% to STAF-Net (V-JEPA 2.1 only,
 DINOv3 only, and Dual-Branch Fusion) with real extracted attention maps.
 """
@@ -51,11 +51,20 @@ for k, v in versions.items():
 
     # ------------------------------------------------------------------ Cell 01: Title
     cells.append(md("""
-# STAF-Net: Spatial–Temporal Attention and Feature Fusion for Deepfake Video Detection
-### Comparative Study of V-JEPA 2.1, DINOv3, and Dual-Branch Feature Fusion
+# STARD: Spatio-Temporal Aware Representation for Deepfake Detection
+### STAF-Net: Spatial–Temporal Attention and Feature Fusion
 
-**STAF-Net Research Team (COMVIS / STARD)**
-Reproducible Technical Report — Deepfake Detection on DFDC (1,023 Verified 16-Frame Face Clips)
+**Anggota kelompok**
+
+- Priyambodo Arundaya Satmika — 245150201111011
+- Alif Negifta Wibawaputra — 245150200111066
+- Muhammad Faris El Hakim — 245150207111019
+
+Pengolahan Citra Digital dan Visi Komputer (CIF61339), Universitas Brawijaya
+
+**Tujuan:** membandingkan representasi DINOv3 dan V-JEPA 2.1, adaptasi LoRA, dan fusi spasial–temporal pada subset DFDC.
+
+Notebook ini memuat EDA, preprocessing, eksperimen tiap cabang, fusi, evaluasi, dan kesimpulan. Jalankan dari awal dengan repo sebagai direktori kerja. Analisis menggunakan manifest, cache fitur, checkpoint, dan metrik yang tersedia di repo; pelatihan ulang backbone memerlukan video dan bobot terpisah.
 """))
 
     # ------------------------------------------------------------------ Cell 02: Table of Contents
@@ -134,6 +143,8 @@ This notebook runs **end-to-end reproducibly on CPU** directly from the verified
 - `results/attention/attention_maps.npz` & `attention_summary.json` — real Frozen & LoRA last-block attention maps extracted on the A100 for 7 curated test clips
 
 Configurable parameters are isolated at the top of the cell below (`ROOT`, `SEED`, `SEEDS_10`). All random seeds are fixed deterministically.
+
+**Catatan replay:** output yang tersimpan merekam lingkungan percobaan awal. Versi library dapat mengubah threshold dan metrik hasil perhitungan ulang; bandingkan output baru dengan metrik yang disimpan sebelum menarik kesimpulan. Source-group disjoint tidak menjamin pemisahan identitas aktor.
 """))
 
     cells.append(code("""
@@ -385,7 +396,7 @@ plt.show()
 """))
 
     cells.append(md("""
-Class balance is tight across every split (**Train: 49.4% FAKE**, **Val: 51.0% FAKE**, **Test: 50.6% FAKE**) with **0 shared `source_group_id`s** across `train/val/test`. Multi-clip source groups (up to 4 clips per source identity) are kept strictly intact within one split. **Decision:** retain source-group splitting and use **group-aware bootstrapping** (`group_bootstrap_auroc`) for 95% confidence intervals.
+Class balance is tight across every split (**Train: 47.6% FAKE**, **Val: 49.0% FAKE**, **Test: 50.6% FAKE**) with **0 shared `source_group_id`s** across `train/val/test`. Multi-clip source groups (up to 4 clips per source identity) are kept strictly intact within one split. **Decision:** retain source-group splitting and use **group-aware bootstrapping** (`group_bootstrap_auroc`) for 95% confidence intervals.
 """))
 
     # 5.3 Embedding geometry & scale audit
@@ -580,7 +591,7 @@ print(f"5-Fold Group-Aware Adversarial Validation AUC (train vs test): {adv_auc:
 """))
 
     cells.append(md("""
-The 5-fold group-aware adversarial validation AUC is **`0.4311`** (at/below random chance `0.50`), confirming **no systematic train-vs-test domain shift** in embedding space. Therefore, any gap between validation AUROC (`~0.88–0.89`) and test AUROC in unnormalized Stage II MLPs reflects **head overfitting on `N = 716` clips**, not covariate shift. **Decision:** prioritize head capacity control and regularization over domain adaptation tricks.
+The 5-fold group-aware adversarial validation AUC is **`0.4311`** (at/below random chance `0.50`), indicating that this particular test did not detect a clear train–test distinction in the measured embedding space. It cannot rule out other forms of domain shift. The validation–test gap may also reflect head overfitting on `N = 716` clips. **Decision:** prioritize head capacity control and regularization over domain adaptation tricks.
 """))
 
     # 5.7 Visual inspection of face crops and sampling strips
@@ -952,7 +963,8 @@ axes[0].legend(loc="lower right", fontsize=8.5)
 # Right: 10-seed boxplot (A1-A8) + Std-Concat horizontal reference line
 exps = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8"]
 seed_vals = [[r["test_auroc"] for r in MULTISEED_10[e]["runs"]] for e in exps]
-bp = axes[1].boxplot(seed_vals, labels=exps, patch_artist=True, widths=0.55)
+bp = axes[1].boxplot(seed_vals, patch_artist=True, widths=0.55)
+axes[1].set_xticks(range(1, len(exps) + 1), exps)
 box_cols = [PALETTE["dino"], PALETTE["vjepa"], PALETTE["dino"], PALETTE["vjepa"],
             PALETTE["unnorm"], PALETTE["unnorm"], PALETTE["unnorm"], PALETTE["unnorm"]]
 for patch, col in zip(bp["boxes"], box_cols):
@@ -1410,7 +1422,7 @@ Across all three approaches on our source-grouped DFDC benchmark (`1,023` verifi
 
 
 def main() -> None:
-    out_path = Path("notebooks/STAF_Net_Technical_Report.ipynb")
+    out_path = Path("notebooks/STARD_Technical_Report.ipynb")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     nb = build_notebook()
     nbf.write(nb, out_path)
